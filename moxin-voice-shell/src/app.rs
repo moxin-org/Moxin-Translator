@@ -72,6 +72,98 @@ unsafe fn hide_nswindow_traffic_lights(title_fragment: &str) {
     }
 }
 
+// ── macOS dock-icon reopen handler ────────────────────────────────────────────
+// Adds `applicationShouldHandleReopen:hasVisibleWindows:` to Makepad's existing
+// `NSAppDelegate` class and forces AppKit to refresh its `respondsToSelector:`
+// cache by detaching and re-attaching the delegate. This callback is fired by
+// AppKit on every dock-icon click, including the case the user cares about:
+// the translation overlay is visible and obscuring the main window.
+//
+// Direct ObjC reordering inside this callback has been observed to be silently
+// dropped — AppKit appears to re-assert window ordering after the callback
+// returns. Instead, the handler only sets the static `DOCK_RAISE_REQUESTED`
+// flag; the actual reorder is performed from `handle_timer` (poll cadence is
+// 50 ms), where the runloop is in a clean state and the changes stick.
+//
+// The handler returns NO so AppKit does not run its default reopen behavior,
+// which would re-foreground the most-recently-used window (the overlay).
+#[cfg(target_os = "macos")]
+static DOCK_RAISE_REQUESTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+#[cfg(target_os = "macos")]
+unsafe fn install_dock_reopen_handler() {
+    use makepad_objc_sys::runtime::{
+        class_addMethod, class_getInstanceMethod, method_setImplementation,
+        object_getClass, sel_registerName,
+        BOOL, Class, Imp, Method, Object, Sel, YES,
+    };
+    #[allow(unused_imports)]
+    use makepad_objc_sys::{class, msg_send, sel, sel_impl};
+    use std::os::raw::c_char;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static INSTALLED: AtomicBool = AtomicBool::new(false);
+    if INSTALLED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    extern "C" fn should_handle_reopen(
+        _self: *mut Object,
+        _cmd: Sel,
+        _app_arg: *mut Object,
+        _has_visible: BOOL,
+    ) -> BOOL {
+        use makepad_objc_sys::runtime::NO;
+        DOCK_RAISE_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+        ::log::info!("[dock] reopen requested -> raise pending");
+        NO
+    }
+
+    let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
+    let delegate: *mut Object = msg_send![app, delegate];
+    if delegate.is_null() {
+        ::log::warn!("[dock] NSApp delegate is nil; reopen handler skipped");
+        INSTALLED.store(false, Ordering::SeqCst);
+        return;
+    }
+
+    let cls = object_getClass(delegate as *const Object) as *mut Class;
+    let sel_bytes = b"applicationShouldHandleReopen:hasVisibleWindows:\0";
+    let sel: Sel = sel_registerName(sel_bytes.as_ptr() as *const c_char);
+
+    // Type encoding: BOOL ret, self (@), _cmd (:), NSApp (@), BOOL.
+    // makepad_objc_sys defines BOOL as `bool` on aarch64 (encoded "B") and
+    // `c_schar` elsewhere (encoded "c").
+    #[cfg(target_arch = "aarch64")]
+    let types: &[u8] = b"B@:@B\0";
+    #[cfg(not(target_arch = "aarch64"))]
+    let types: &[u8] = b"c@:@c\0";
+
+    let imp: Imp = std::mem::transmute(should_handle_reopen as *const ());
+
+    let added = class_addMethod(cls, sel, imp, types.as_ptr() as *const c_char);
+    if added != YES {
+        // Method already exists on the class — replace its implementation.
+        let method = class_getInstanceMethod(cls as *const Class, sel) as *mut Method;
+        if method.is_null() {
+            ::log::warn!("[dock] failed to add or locate reopen method");
+            INSTALLED.store(false, Ordering::SeqCst);
+            return;
+        }
+        let _ = method_setImplementation(method, imp);
+    }
+
+    // AppKit caches the delegate's `respondsToSelector:` results at the time
+    // `setDelegate:` is called. Because Makepad set the delegate before our
+    // method existed, we have to detach and re-attach it to force AppKit to
+    // re-query and pick up `applicationShouldHandleReopen:hasVisibleWindows:`.
+    let nilp: *mut Object = std::ptr::null_mut();
+    let _: () = msg_send![app, setDelegate: nilp];
+    let _: () = msg_send![app, setDelegate: delegate];
+
+    ::log::info!("[dock] installed applicationShouldHandleReopen:hasVisibleWindows:");
+}
+
 use crate::Args;
 
 // ============================================================================
@@ -284,6 +376,12 @@ impl MatchEvent for App {
     fn handle_startup(&mut self, cx: &mut Cx) {
         ::log::info!("Moxin Voice application started");
 
+        // Inject a dock-icon reopen handler so that clicking the dock icon
+        // always raises the main window — even when the translation overlay
+        // is fullscreen on its own Space and would otherwise stay foreground.
+        #[cfg(target_os = "macos")]
+        unsafe { install_dock_reopen_handler(); }
+
         // Keep window widget itself visible; use OS minimize/restore for show/hide.
         // Otherwise an OS-restored window may render only clear color (black) with no widgets.
         self.translation_ui.set_visible(cx, true);
@@ -315,6 +413,19 @@ impl MatchEvent for App {
     fn handle_timer(&mut self, cx: &mut Cx, event: &TimerEvent) {
         if self.poll_timer.is_timer(event).is_none() {
             return;
+        }
+
+        // Apply any pending dock-icon reopen request. Direct ObjC reordering
+        // from the AppKit reopen callback was observed to be silently dropped
+        // in this Makepad-hosted setup; minimizing the overlay via Makepad's
+        // own CxOsOp pipeline (a code path already proven to work elsewhere
+        // in this app) makes the main window naturally accessible again.
+        #[cfg(target_os = "macos")]
+        if DOCK_RAISE_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+            if let Some(translation_window_id) = self.translation_window_id {
+                cx.push_unique_platform_op(CxOsOp::MinimizeWindow(translation_window_id));
+                ::log::info!("[dock] minimized overlay so main becomes accessible");
+            }
         }
 
         let dora_state = match self
