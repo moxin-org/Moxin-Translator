@@ -12846,7 +12846,7 @@ impl TTSScreen {
     fn refresh_update_affordances(&mut self, cx: &mut Cx) {
         let has_ready_update = self.ready_update().is_some();
         let settings_label = self.tr("设置", "Settings");
-        let update_badge = self.tr("新版本", "New Version");
+        let update_badge = self.tr("新版本", "Update");
         let version_label = format!("Moxin Voice v{}", self.current_display_version());
 
         self.view
