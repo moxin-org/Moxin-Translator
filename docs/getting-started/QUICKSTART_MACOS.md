@@ -47,10 +47,11 @@ cargo run -p moxin-voice-shell
 
 ```bash
 bash scripts/build_macos_app.sh \
-  --icon moxin-widgets/resources/moxin_icon_fixed.png \
-  --version 0.0.6
+  --icon moxin-widgets/resources/moxin_icon_fixed.png
 bash scripts/build_macos_dmg.sh
 ```
+
+App Bundle 版本默认读取根目录 `Cargo.toml` 中的 workspace version。
 
 ## 分发（用户机器首次启动）
 

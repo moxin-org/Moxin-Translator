@@ -168,12 +168,11 @@ cargo build --release
 
 ```bash
 bash scripts/build_macos_app.sh \
-  --icon moxin-widgets/resources/moxin_icon_fixed.png \
-  --version 0.0.6
+  --icon moxin-widgets/resources/moxin_icon_fixed.png
 bash scripts/build_macos_dmg.sh
 ```
 
-The packaged `.app` bundles the launcher, runtime nodes, bootstrap scripts, and update helper. End users do not need to run bootstrap scripts manually.
+The app bundle version defaults to the workspace version in `Cargo.toml`. The packaged `.app` bundles the launcher, runtime nodes, bootstrap scripts, and update helper. End users do not need to run bootstrap scripts manually.
 
 ---
 

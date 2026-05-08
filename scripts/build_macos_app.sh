@@ -7,6 +7,11 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKSPACE_VERSION="$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"/\1/p;}' "$ROOT_DIR/Cargo.toml" | head -n 1)"
+if [[ -z "$WORKSPACE_VERSION" ]]; then
+  echo "Failed to read workspace package version from $ROOT_DIR/Cargo.toml"
+  exit 1
+fi
 
 APP_NAME="Moxin Voice"
 BUNDLE_ID="com.moxin.voice"
@@ -14,7 +19,7 @@ BIN_NAME="moxin-voice-shell"
 PROFILE="release"
 ICON_PATH=""
 OUT_DIR="$ROOT_DIR/dist"
-VERSION="0.0.6"
+VERSION="$WORKSPACE_VERSION"
 
 usage() {
   cat <<EOF

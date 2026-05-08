@@ -10,8 +10,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="Moxin Voice"
 APP_PATH="$ROOT_DIR/dist/${APP_NAME}.app"
 OUT_DIR="$ROOT_DIR/dist"
-VOL_NAME="$APP_NAME Installer"
-DMG_NAME="${APP_NAME}.dmg"
+VERSION=""
+VOL_NAME=""
+DMG_NAME=""
+
+read_workspace_version() {
+  sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"/\1/p;}' "$ROOT_DIR/Cargo.toml" | head -n 1
+}
+
+read_app_version() {
+  local plist="$APP_PATH/Contents/Info.plist"
+  if [[ -f "$plist" ]] && command -v /usr/libexec/PlistBuddy >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist" 2>/dev/null || true
+  fi
+}
 
 usage() {
   cat <<EOF
@@ -21,8 +33,9 @@ Usage:
 Options:
   --app-path <path>   Path to .app bundle (default: $APP_PATH)
   --out-dir <dir>     Output directory (default: $OUT_DIR)
-  --vol-name <name>   DMG volume name (default: $VOL_NAME)
-  --dmg-name <name>   DMG file name (default: $DMG_NAME)
+  --version <version> Version used for default DMG naming (default: app bundle version)
+  --vol-name <name>   DMG volume name (default: "$APP_NAME <version> Installer")
+  --dmg-name <name>   DMG file name (default: Moxin-Voice-v<version>.dmg)
   -h, --help          Show this help
 EOF
 }
@@ -35,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --out-dir)
       OUT_DIR="$2"
+      shift 2
+      ;;
+    --version)
+      VERSION="$2"
       shift 2
       ;;
     --vol-name)
@@ -61,6 +78,23 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "App bundle not found: $APP_PATH"
   echo "Build it first with scripts/build_macos_app.sh"
   exit 1
+fi
+
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(read_app_version)"
+fi
+if [[ -z "$VERSION" ]]; then
+  VERSION="$(read_workspace_version)"
+fi
+if [[ -z "$VERSION" ]]; then
+  echo "Failed to determine version from app bundle or Cargo.toml"
+  exit 1
+fi
+if [[ -z "$VOL_NAME" ]]; then
+  VOL_NAME="$APP_NAME $VERSION Installer"
+fi
+if [[ -z "$DMG_NAME" ]]; then
+  DMG_NAME="Moxin-Voice-v${VERSION}.dmg"
 fi
 
 mkdir -p "$OUT_DIR"

@@ -5907,7 +5907,7 @@ live_design! {
                                             return mix((MOXIN_TEXT_SECONDARY), (MOXIN_TEXT_SECONDARY_DARK), self.dark_mode);
                                         }
                                     }
-                                    text: "v0.0.6"
+                                    text: "v"
                                 }
 
                                 about_page_engine = <Label> {
