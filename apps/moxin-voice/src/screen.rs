@@ -27,6 +27,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+const MOXIN_VOICE_BUNDLE_ID: &str = "com.moxin.voice";
+
 /// Current page in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AppPage {
@@ -8487,6 +8489,7 @@ impl Widget for TTSScreen {
 
             // Initialize global settings state (restore persisted language)
             self.global_settings_visible = false;
+            let preferences_existed = app_preferences::preferences_path().exists();
             self.app_preferences = app_preferences::load_preferences();
             self.app_language = if self.app_preferences.app_language == "en" {
                 "en".to_string()
@@ -8499,7 +8502,10 @@ impl Widget for TTSScreen {
             self.app_preferences.inference_backend = "qwen3_tts_mlx".to_string();
             self.app_preferences.zero_shot_backend = "qwen3_tts_mlx".to_string();
             self.app_preferences.training_backend = "option_c".to_string(); // Qwen3 ICL mode
-                                                                            // Sync selected model with validated inference_backend preference
+            self.record_app_version_and_reset_screen_capture_permission_if_needed(
+                preferences_existed,
+            );
+            // Sync selected model with validated inference_backend preference
             {
                 let validated_backend = self.app_preferences.inference_backend.clone();
                 self.selected_tts_model_id =
@@ -12984,6 +12990,74 @@ impl TTSScreen {
                 &format!("[WARN] [prefs] Failed to save preferences: {}", e),
             );
         }
+    }
+
+    fn record_app_version_and_reset_screen_capture_permission_if_needed(
+        &mut self,
+        preferences_existed: bool,
+    ) {
+        if app_update::current_app_bundle_path().is_none() {
+            return;
+        }
+
+        let current_version = app_update::display_version();
+        let transition = app_preferences::record_app_version_transition(
+            &mut self.app_preferences,
+            &current_version,
+            preferences_existed,
+        );
+
+        let should_save = !matches!(
+            transition,
+            app_preferences::AppVersionTransition::SameVersion
+        );
+
+        if let app_preferences::AppVersionTransition::Updated { previous, current } = &transition {
+            let previous_label = previous.as_deref().unwrap_or("legacy install");
+            self.log_entries.push(format!(
+                "[INFO] [privacy] App version changed from {} to {}; resetting ScreenCapture permission decision",
+                previous_label, current
+            ));
+
+            match Self::reset_screen_capture_permission_decision(MOXIN_VOICE_BUNDLE_ID) {
+                Ok(()) => self.log_entries.push(format!(
+                    "[INFO] [privacy] Reset ScreenCapture permission decision for {}",
+                    MOXIN_VOICE_BUNDLE_ID
+                )),
+                Err(err) => self.log_entries.push(format!(
+                    "[WARN] [privacy] Failed to reset ScreenCapture permission decision: {}",
+                    err
+                )),
+            }
+        }
+
+        if should_save {
+            if let Err(e) = app_preferences::save_preferences(&self.app_preferences) {
+                self.log_entries.push(format!(
+                    "[WARN] [prefs] Failed to save app version state: {}",
+                    e
+                ));
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn reset_screen_capture_permission_decision(bundle_id: &str) -> Result<(), String> {
+        let status = Command::new("/usr/bin/tccutil")
+            .args(["reset", "ScreenCapture", bundle_id])
+            .status()
+            .map_err(|e| format!("failed to launch tccutil: {}", e))?;
+
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("tccutil exited with status {}", status))
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn reset_screen_capture_permission_decision(_bundle_id: &str) -> Result<(), String> {
+        Ok(())
     }
 
     fn app_logs_dir() -> PathBuf {

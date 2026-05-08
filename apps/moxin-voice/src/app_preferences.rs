@@ -13,6 +13,7 @@ pub struct AppPreferences {
     pub app_language: String, // "en" | "zh"
     pub display_name: String,
     pub avatar_letter: String,
+    pub last_seen_app_version: Option<String>,
     pub default_voice_id: Option<String>,
     pub default_speed: f64,
     pub default_pitch: f64,
@@ -32,6 +33,7 @@ impl Default for AppPreferences {
             app_language: "en".to_string(),
             display_name: "User".to_string(),
             avatar_letter: "U".to_string(),
+            last_seen_app_version: None,
             default_voice_id: Some("vivian".to_string()),
             default_speed: 1.0,
             default_pitch: 0.0,
@@ -44,6 +46,45 @@ impl Default for AppPreferences {
             preferred_input_device: None,
             debug_logs_enabled: false,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppVersionTransition {
+    FirstLaunch,
+    SameVersion,
+    Updated {
+        previous: Option<String>,
+        current: String,
+    },
+}
+
+pub fn record_app_version_transition(
+    prefs: &mut AppPreferences,
+    current_version: &str,
+    had_existing_preferences: bool,
+) -> AppVersionTransition {
+    let current = current_version.trim().to_string();
+    let previous = prefs
+        .last_seen_app_version
+        .as_deref()
+        .map(str::trim)
+        .filter(|version| !version.is_empty())
+        .map(str::to_string);
+
+    prefs.last_seen_app_version = Some(current.clone());
+
+    match previous {
+        Some(previous) if previous == current => AppVersionTransition::SameVersion,
+        Some(previous) => AppVersionTransition::Updated {
+            previous: Some(previous),
+            current,
+        },
+        None if had_existing_preferences => AppVersionTransition::Updated {
+            previous: None,
+            current,
+        },
+        None => AppVersionTransition::FirstLaunch,
     }
 }
 
@@ -76,4 +117,70 @@ pub fn save_preferences(prefs: &AppPreferences) -> Result<(), String> {
     let json = serde_json::to_string_pretty(prefs)
         .map_err(|e| format!("Failed to serialize preferences: {}", e))?;
     fs::write(preferences_path(), json).map_err(|e| format!("Failed to write preferences: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_version_transition_marks_first_launch_without_reset() {
+        let mut prefs = AppPreferences::default();
+
+        let transition = record_app_version_transition(&mut prefs, "0.0.7", false);
+
+        assert_eq!(transition, AppVersionTransition::FirstLaunch);
+        assert_eq!(prefs.last_seen_app_version.as_deref(), Some("0.0.7"));
+    }
+
+    #[test]
+    fn app_version_transition_ignores_same_version() {
+        let mut prefs = AppPreferences {
+            last_seen_app_version: Some("0.0.7".to_string()),
+            ..AppPreferences::default()
+        };
+
+        let transition = record_app_version_transition(&mut prefs, "0.0.7", true);
+
+        assert_eq!(transition, AppVersionTransition::SameVersion);
+        assert_eq!(prefs.last_seen_app_version.as_deref(), Some("0.0.7"));
+    }
+
+    #[test]
+    fn app_version_transition_treats_legacy_preferences_as_update() {
+        let mut prefs = AppPreferences::default();
+
+        let transition = record_app_version_transition(&mut prefs, "0.0.7", true);
+
+        assert_eq!(
+            transition,
+            AppVersionTransition::Updated {
+                previous: None,
+                current: "0.0.7".to_string()
+            }
+        );
+        assert_eq!(prefs.last_seen_app_version.as_deref(), Some("0.0.7"));
+    }
+
+    #[test]
+    fn app_version_transition_detects_update_once() {
+        let mut prefs = AppPreferences {
+            last_seen_app_version: Some("0.0.6".to_string()),
+            ..AppPreferences::default()
+        };
+
+        let transition = record_app_version_transition(&mut prefs, "0.0.7", true);
+
+        assert_eq!(
+            transition,
+            AppVersionTransition::Updated {
+                previous: Some("0.0.6".to_string()),
+                current: "0.0.7".to_string()
+            }
+        );
+        assert_eq!(prefs.last_seen_app_version.as_deref(), Some("0.0.7"));
+
+        let transition = record_app_version_transition(&mut prefs, "0.0.7", true);
+        assert_eq!(transition, AppVersionTransition::SameVersion);
+    }
 }
