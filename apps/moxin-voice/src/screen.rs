@@ -61,7 +61,7 @@ enum DownloadSource {
     History(String),
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DownloadFormat {
     Mp3,
     Wav,
@@ -4751,101 +4751,26 @@ live_design! {
                                     }
                                 }
                             }
-                        }
 
-                        profile_card = <SettingsCard> {
-                            width: Fill, height: Fit
-                            flow: Down
-                            spacing: 14
-                            padding: {left: 18, right: 18, top: 16, bottom: 16}
-                            draw_bg: {
-                                instance dark_mode: 0.0
-                                instance border_radius: 12.0
-                                fn pixel(self) -> vec4 {
-                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                    let bg = mix((WHITE), (SLATE_800), self.dark_mode);
-                                    let border = mix((SLATE_200), (SLATE_700), self.dark_mode);
-                                    sdf.fill(bg);
-                                    sdf.stroke(border, 1.0);
-                                    return sdf.result;
-                                }
-                            }
-
-                            profile_title = <Label> {
-                                width: Fit, height: Fit
-                                draw_text: {
-                                    instance dark_mode: 0.0
-                                    text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
-                                    fn get_color(self) -> vec4 {
-                                        return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
-                                    }
-                                }
-                                text: "个人资料"
-                            }
-
-                            profile_body = <View> {
+                            download_format_section = <View> {
                                 width: Fill, height: Fit
                                 flow: Down
                                 spacing: 10
-                                align: {x: 0.0, y: 0.0}
 
-                                profile_form = <View> {
-                                    width: Fill, height: Fit
-                                    flow: Down
-                                    spacing: 10
-
-                                    name_row = <View> {
-                                        width: Fill, height: Fit
-                                        flow: Down
-                                        spacing: 6
-
-                                        name_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 12.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
-                                                }
-                                            }
-                                            text: "用户名"
-                                        }
-
-                                        name_input = <SettingsTextInput> {
-                                            width: Fill, height: 36
-                                            empty_text: "输入用户名"
-                                        }
-                                    }
-                                }
-                            }
-
-                            profile_actions = <View> {
-                                width: Fill, height: Fit
-                                flow: Right
-                                align: {x: 1.0}
-
-                                save_profile_btn = <Button> {
-                                    width: Fit, height: 36
-                                    padding: {left: 16, right: 16}
-                                    text: "保存"
-                                    draw_bg: {
-                                        instance dark_mode: 0.0
-                                        instance hover: 0.0
-                                        instance border_radius: 8.0
-                                        fn pixel(self) -> vec4 {
-                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                            sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                            let base = mix((PRIMARY_500), (PRIMARY_400), self.dark_mode);
-                                            let hover_color = mix((PRIMARY_600), (PRIMARY_300), self.dark_mode);
-                                            sdf.fill(mix(base, hover_color, self.hover));
-                                            return sdf.result;
-                                        }
-                                    }
+                                download_format_label = <Label> {
+                                    width: Fit, height: Fit
                                     draw_text: {
+                                        instance dark_mode: 0.0
                                         text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
-                                        fn get_color(self) -> vec4 { return (WHITE); }
+                                        fn get_color(self) -> vec4 {
+                                            return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                        }
                                     }
+                                    text: "下载格式"
+                                }
+
+                                download_format_dropdown = <SettingsDeviceDropDown> {
+                                    width: Fill, height: 38
                                 }
                             }
                         }
@@ -9542,6 +9467,35 @@ impl Widget for TTSScreen {
             self.user_settings_tab = 0;
             self.update_user_settings_tabs(cx);
         }
+
+        if let Some(idx) = self
+            .view
+            .drop_down(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .download_format_section
+                    .download_format_dropdown
+            ))
+            .changed(&actions)
+        {
+            self.app_preferences.tts_download_format = match idx {
+                1 => "wav".to_string(),
+                _ => "mp3".to_string(),
+            };
+            if let Err(e) = app_preferences::save_preferences(&self.app_preferences) {
+                self.add_log(cx, &format!("[WARN] [prefs] Failed to save preferences: {}", e));
+            }
+            self.update_user_settings_page(cx);
+            self.show_toast(cx, self.tr("下载格式已保存", "TTS Download format saved"));
+        }
+
         if self
             .view
             .button(ids!(
@@ -9983,55 +9937,6 @@ impl Widget for TTSScreen {
                 self.voice_picker_trait_filter |= CHARACTER_BIT;
             }
             self.update_voice_picker_controls(cx);
-        }
-
-        if self
-            .view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_actions
-                    .save_profile_btn
-            ))
-            .clicked(&actions)
-        {
-            let raw_name = self
-                .view
-                .text_input(ids!(
-                    content_wrapper
-                        .main_content
-                        .left_column
-                        .content_area
-                        .user_settings_page
-                        .settings_scroll
-                        .settings_scroll_content
-                        .profile_panel
-                        .profile_card
-                        .profile_body
-                        .profile_form
-                        .name_row
-                        .name_input
-                ))
-                .text();
-            let trimmed = raw_name.trim().to_string();
-            if !trimmed.is_empty() {
-                self.user_display_name = trimmed.clone();
-                self.user_avatar_letter = trimmed
-                    .chars()
-                    .next()
-                    .map(|c| c.to_uppercase().to_string())
-                    .unwrap_or_default();
-            }
-            self.persist_app_preferences(cx);
-            self.sync_user_profile_ui(cx);
-            self.show_toast(cx, self.tr("用户名已保存", "Username saved"));
         }
 
         if self
@@ -12790,25 +12695,6 @@ impl TTSScreen {
         desc
     }
 
-    fn normalized_profile_name(input: &str) -> String {
-        let name = input.trim();
-        if name.is_empty() {
-            "User".to_string()
-        } else {
-            name.chars().take(24).collect::<String>()
-        }
-    }
-
-    fn normalized_avatar_letter(input: &str, fallback_name: &str) -> String {
-        if let Some(first) = input.trim().chars().next() {
-            return first.to_uppercase().collect::<String>();
-        }
-        if let Some(first) = fallback_name.chars().next() {
-            return first.to_uppercase().collect::<String>();
-        }
-        "U".to_string()
-    }
-
     fn sync_user_profile_ui(&mut self, cx: &mut Cx) {
         self.view
             .label(ids!(
@@ -12818,23 +12704,6 @@ impl TTSScreen {
         self.view
             .view(ids!(app_layout.sidebar.sidebar_footer.user_avatar))
             .set_visible(cx, false);
-        self.view
-            .text_input(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_body
-                    .profile_form
-                    .name_row
-                    .name_input
-            ))
-            .set_text(cx, &self.user_display_name);
         self.refresh_update_affordances(cx);
     }
 
@@ -13581,6 +13450,42 @@ impl TTSScreen {
                     .volume_input
             ))
             .set_text(cx, &format!("{:.0}", self.app_preferences.default_volume));
+        self.view
+            .drop_down(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .download_format_section
+                    .download_format_dropdown
+            ))
+            .set_labels(cx, vec!["MP3".to_string(), "WAV".to_string()]);
+        let download_format_idx =
+            match Self::download_format_from_preference(&self.app_preferences.tts_download_format)
+            {
+                DownloadFormat::Wav => 1,
+                DownloadFormat::Mp3 => 0,
+            };
+        self.view
+            .drop_down(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .download_format_section
+                    .download_format_dropdown
+            ))
+            .set_selected_item(cx, download_format_idx);
         self.view
             .drop_down(ids!(
                 content_wrapper
@@ -14793,69 +14698,6 @@ impl TTSScreen {
                     .user_settings_page
                     .settings_scroll
                     .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_title
-            ))
-            .set_text(cx, self.tr("个人资料", "Profile"));
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_body
-                    .profile_form
-                    .name_row
-                    .name_label
-            ))
-            .set_text(cx, self.tr("用户名", "Username"));
-        self.view
-            .text_input(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_body
-                    .profile_form
-                    .name_row
-                    .name_input
-            ))
-            .set_empty_text(cx, self.tr("输入用户名", "Enter username").to_string());
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_actions
-                    .save_profile_btn
-            ))
-            .set_text(cx, self.tr("保存", "Save"));
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
                     .app_panel
                     .defaults_card
                     .defaults_title
@@ -15811,6 +15653,21 @@ impl TTSScreen {
                     .theme_dark_option
             ))
             .set_text(cx, self.tr("🌙 深色", "🌙 Dark"));
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .download_format_section
+                    .download_format_label
+            ))
+            .set_text(cx, self.tr("TTS 下载格式", "TTS Download Format"));
 
         if !self.user_profile_customized {
             self.user_display_name = self.tr("用户", "User").to_string();
@@ -20558,10 +20415,10 @@ impl TTSScreen {
             }
         }
 
+        let format =
+            Self::download_format_from_preference(&self.app_preferences.tts_download_format);
         self.pending_download_source = Some(source);
-        self.download_modal_visible = true;
-        self.view.view(ids!(download_modal)).set_visible(cx, true);
-        self.view.redraw(cx);
+        self.download_audio_to_format(cx, format);
     }
 
     fn close_download_modal(&mut self, cx: &mut Cx) {
@@ -20803,6 +20660,13 @@ impl TTSScreen {
         match format {
             DownloadFormat::Mp3 => "MP3",
             DownloadFormat::Wav => "WAV",
+        }
+    }
+
+    fn download_format_from_preference(value: &str) -> DownloadFormat {
+        match value {
+            "wav" => DownloadFormat::Wav,
+            _ => DownloadFormat::Mp3,
         }
     }
 
@@ -22138,6 +22002,26 @@ impl TTSScreen {
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .download_format_section
+                    .download_format_label
+            ))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .drop_down(ids!(
+                content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.download_format_section.download_format_dropdown
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 220.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
+        self.view
             .view(ids!(
                 content_wrapper
                     .main_content
@@ -23149,87 +23033,6 @@ impl TTSScreen {
         self.view
             .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.debug_pick_row.debug_logs_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
-
-        // profile_card
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_title
-            ))
-            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_body
-                    .profile_form
-                    .name_row
-                    .name_label
-            ))
-            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
-        self.view
-            .text_input(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_body
-                    .profile_form
-                    .name_row
-                    .name_input
-            ))
-            .apply_over(
-                cx,
-                live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } },
-            );
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .user_settings_page
-                    .settings_scroll
-                    .settings_scroll_content
-                    .profile_panel
-                    .profile_card
-                    .profile_actions
-                    .save_profile_btn
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
 
         // defaults_card labels + action buttons
         self.view
@@ -25613,7 +25416,7 @@ impl TTSScreenRef {
 mod tests {
     use super::{
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
-        AppPage, RuntimeInitState,
+        AppPage, DownloadFormat, RuntimeInitState, TTSScreen,
     };
 
     #[test]
@@ -25662,5 +25465,21 @@ mod tests {
             AppPage::Translation,
             true
         ));
+    }
+
+    #[test]
+    fn tts_download_format_preference_maps_to_supported_formats() {
+        assert_eq!(
+            TTSScreen::download_format_from_preference("mp3"),
+            DownloadFormat::Mp3
+        );
+        assert_eq!(
+            TTSScreen::download_format_from_preference("wav"),
+            DownloadFormat::Wav
+        );
+        assert_eq!(
+            TTSScreen::download_format_from_preference("flac"),
+            DownloadFormat::Mp3
+        );
     }
 }

@@ -24,6 +24,7 @@ pub struct AppPreferences {
     pub training_backend: String,    // option_a | option_b
     pub preferred_output_device: Option<String>,
     pub preferred_input_device: Option<String>,
+    pub tts_download_format: String, // "mp3" | "wav"
     pub debug_logs_enabled: bool,
 }
 
@@ -44,6 +45,7 @@ impl Default for AppPreferences {
             training_backend: "option_c".to_string(), // Qwen3 mode (ICL only)
             preferred_output_device: None,
             preferred_input_device: None,
+            tts_download_format: "mp3".to_string(),
             debug_logs_enabled: false,
         }
     }
@@ -182,5 +184,19 @@ mod tests {
 
         let transition = record_app_version_transition(&mut prefs, "0.0.7", true);
         assert_eq!(transition, AppVersionTransition::SameVersion);
+    }
+
+    #[test]
+    fn legacy_preferences_default_tts_download_format_to_mp3() {
+        let prefs: AppPreferences = serde_json::from_str(
+            r#"{
+                "app_language": "zh",
+                "display_name": "Alan",
+                "avatar_letter": "A"
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(prefs.tts_download_format, "mp3");
     }
 }
