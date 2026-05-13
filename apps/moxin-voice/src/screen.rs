@@ -19312,6 +19312,7 @@ impl TTSScreen {
                 .translation_overlay_opacity
                 .set(self.translation_overlay_opacity);
             // Reset status to warming until the bridges report ready.
+            shared.translation_overlay_active.set(true);
             shared.translation_overlay_status.set("warming".to_string());
         }
         self.translation_overlay_status_cached.clear();
@@ -19353,6 +19354,8 @@ impl TTSScreen {
         // The window stays visible until the user closes it manually.
         if let Some(shared) = self.translation_shared_state() {
             shared.translation.set(None);
+            shared.translation_overlay_active.set(false);
+            shared.translation_overlay_status.set("idle".to_string());
         }
 
         self.save_translation_transcript_if_enabled(cx, &history_snapshot);
@@ -25813,6 +25816,14 @@ impl TTSScreenRef {
     pub fn translation_shared_dora_state(&self) -> Option<Arc<moxin_dora_bridge::SharedDoraState>> {
         self.borrow()
             .and_then(|inner| inner.translation_shared_state())
+    }
+
+    pub fn stop_translation_from_overlay(&self, cx: &mut Cx) {
+        if let Some(mut inner) = self.borrow_mut() {
+            if inner.translation_running {
+                inner.stop_translation_dataflow(cx);
+            }
+        }
     }
 
     pub fn update_dark_mode(&self, cx: &mut Cx, dark_mode: f64) {

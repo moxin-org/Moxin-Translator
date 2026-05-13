@@ -369,8 +369,22 @@ impl AppMain for App {
 }
 
 impl MatchEvent for App {
-    fn handle_actions(&mut self, _cx: &mut Cx, _actions: &Actions) {
-        // Translation overlay no longer emits actions; nothing to handle here.
+    fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
+        if self
+            .translation_ui
+            .button(ids!(
+                body
+                    .translation_overlay
+                    .overlay_footer
+                    .footer_controls
+                    .overlay_stop_btn
+            ))
+            .clicked(actions)
+        {
+            self.ui
+                .ttsscreen(ids!(body.tts_screen))
+                .stop_translation_from_overlay(cx);
+        }
     }
 
     fn handle_startup(&mut self, cx: &mut Cx) {
@@ -550,11 +564,9 @@ impl MatchEvent for App {
             };
         }
 
-        // ── Translation overlay status heartbeat (warming/listening) ──────────
-        // The overlay no longer renders this status itself, but the settings
-        // page in screen.rs reads `translation_overlay_status` and shows it on
-        // the runtime-logs card. Keep the bridge-readiness check here.
+        // ── Translation overlay status heartbeat (idle/warming/listening) ─────
         if self.translation_overlay_visible {
+            let active = dora_state.translation_overlay_active.read();
             let status_snapshot = dora_state.status.read();
             let bridges_ready = status_snapshot
                 .active_bridges
@@ -565,13 +577,25 @@ impl MatchEvent for App {
                     .iter()
                     .any(|b| b == "moxin-translation-listener");
 
-            let new_status = if bridges_ready { "listening" } else { "warming" };
+            let new_status = if !active {
+                "idle"
+            } else if bridges_ready {
+                "listening"
+            } else {
+                "warming"
+            };
             // Set unconditionally; DirtyValue collapses redundant writes for the
             // consumer side (read_if_dirty), and screen.rs guards on actual change.
             dora_state
                 .translation_overlay_status
                 .set(new_status.to_string());
         }
+
+        let status = dora_state.translation_overlay_status.read();
+        let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
+        if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
+            overlay.set_status(cx, &status);
+        };
 
         // ── Translation overlay opacity ──────────────────────────────────────
         let opacity = dora_state.translation_overlay_opacity.read();

@@ -697,6 +697,9 @@ pub struct SharedDoraState {
     /// Computed warming/listening status for the translation page badge.
     /// Values: "warming" (bridges not yet ready) or "listening" (bridges ready).
     pub translation_overlay_status: DirtyValue<String>,
+
+    /// Whether a translation session is currently starting/running.
+    pub translation_overlay_active: DirtyValue<bool>,
 }
 
 /// Global singleton — all crates share the same SharedDoraState instance.
@@ -728,6 +731,7 @@ impl SharedDoraState {
                     translation_anchor_position_preset: DirtyValue::new("50".to_string()),
                     translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
                     translation_overlay_status: DirtyValue::new("warming".to_string()),
+                    translation_overlay_active: DirtyValue::new(false),
                 })
             })
             .clone()
@@ -754,6 +758,7 @@ impl SharedDoraState {
             translation_anchor_position_preset: DirtyValue::new("50".to_string()),
             translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
             translation_overlay_status: DirtyValue::new("warming".to_string()),
+            translation_overlay_active: DirtyValue::new(false),
         })
     }
 
@@ -815,6 +820,7 @@ impl Default for SharedDoraState {
             translation_anchor_position_preset: DirtyValue::new("50".to_string()),
             translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
             translation_overlay_status: DirtyValue::new("warming".to_string()),
+            translation_overlay_active: DirtyValue::new(false),
         }
     }
 }

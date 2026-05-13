@@ -109,21 +109,75 @@ live_design! {
             flow: Right
             align: {x: 0.5, y: 0.5}
             spacing: 5
-            padding: {top: 4, bottom: 4}
+            padding: {left: 10, right: 10, top: 4, bottom: 4}
 
-            footer_logo = <Image> {
-                width: 22, height: 22
-                source: dep("crate://self/resources/moxin_icon_fixed.png")
-                fit: Smallest
+            footer_left_spacer = <View> { width: 58, height: 1 }
+
+            footer_brand = <View> {
+                width: Fill, height: Fit
+                flow: Right
+                align: {x: 0.5, y: 0.5}
+                spacing: 5
+
+                footer_logo = <Image> {
+                    width: 22, height: 22
+                    source: dep("crate://self/resources/moxin_icon_fixed.png")
+                    fit: Smallest
+                }
+
+                footer_label = <Label> {
+                    width: Fit
+                    draw_text: {
+                        color: (MOXIN_TEXT_MUTED_DARK)
+                        text_style: <FONT_REGULAR> { font_size: 10.0 }
+                    }
+                    text: "Moxin Voice - Fully Offline Live Translation, Powered by OminiX MLX"
+                }
             }
 
-            footer_label = <Label> {
-                width: Fit
-                draw_text: {
-                    color: (MOXIN_TEXT_MUTED_DARK)
-                    text_style: <FONT_REGULAR> { font_size: 10.0 }
+            footer_controls = <View> {
+                width: 58, height: Fit
+                flow: Right
+                align: {x: 1.0, y: 0.5}
+                spacing: 8
+
+                overlay_stop_btn = <Button> {
+                    width: 22, height: 22
+                    visible: false
+                    text: "■"
+                    padding: 0
+                    draw_bg: {
+                        instance hover: 0.0
+                        instance pressed: 0.0
+                        instance border_radius: 11.0
+                        fn pixel(self) -> vec4 {
+                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                            sdf.circle(self.rect_size.x * 0.5, self.rect_size.y * 0.5, self.rect_size.x * 0.5);
+                            let base = vec4(0.85, 0.25, 0.25, 0.92);
+                            let hover = vec4(0.95, 0.32, 0.32, 1.0);
+                            sdf.fill(mix(base, hover, self.hover));
+                            return sdf.result;
+                        }
+                    }
+                    draw_text: {
+                        text_style: <FONT_REGULAR> { font_size: 9.0 }
+                        fn get_color(self) -> vec4 { return vec4(1.0, 1.0, 1.0, 1.0); }
+                    }
                 }
-                text: "Moxin Voice - Fully Offline Live Translation, Powered by OminiX MLX"
+
+                overlay_status_dot = <View> {
+                    width: 12, height: 12
+                    show_bg: true
+                    draw_bg: {
+                        instance dot_color: vec4(0.451, 0.463, 0.478, 1.0)
+                        fn pixel(self) -> vec4 {
+                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                            sdf.circle(self.rect_size.x * 0.5, self.rect_size.y * 0.5, 5.5);
+                            sdf.fill(self.dot_color);
+                            return sdf.result;
+                        }
+                    }
+                }
             }
         }
     }
@@ -314,6 +368,9 @@ pub struct TranslationOverlay {
     /// Passthrough mode — no translation, source text IS the output.
     #[rust]
     passthrough: bool,
+
+    #[rust]
+    status: String,
 }
 
 impl Widget for TranslationOverlay {
@@ -412,11 +469,30 @@ impl TranslationOverlay {
         let size = Self::footer_font_size_value(&self.footer_font_size_preset);
         let logo_size = Self::footer_logo_size_value(&self.footer_font_size_preset);
         self.view
-            .label(ids!(overlay_footer.footer_label))
+            .label(ids!(overlay_footer.footer_brand.footer_label))
             .apply_over(cx, live! { draw_text: { text_style: { font_size: (size) } } });
         self.view
-            .image(ids!(overlay_footer.footer_logo))
+            .image(ids!(overlay_footer.footer_brand.footer_logo))
             .apply_over(cx, live! { width: (logo_size), height: (logo_size) });
+    }
+
+    pub fn set_status(&mut self, cx: &mut Cx, status: &str) {
+        if self.status == status {
+            return;
+        }
+        self.status = status.to_string();
+        let (dot_color, show_stop) = match status {
+            "listening" => (vec4(0.098, 0.725, 0.506, 1.0), true),
+            "warming" => (vec4(0.906, 0.620, 0.204, 1.0), false),
+            _ => (vec4(0.451, 0.463, 0.478, 1.0), false),
+        };
+        self.view
+            .view(ids!(overlay_footer.footer_controls.overlay_status_dot))
+            .apply_over(cx, live! { draw_bg: { dot_color: (dot_color) } });
+        self.view
+            .button(ids!(overlay_footer.footer_controls.overlay_stop_btn))
+            .set_visible(cx, show_stop);
+        self.view.redraw(cx);
     }
 
     fn compute_anchor_spacer_height(
@@ -845,6 +921,12 @@ impl TranslationOverlayRef {
     pub fn set_opacity(&self, cx: &mut Cx, opacity: f64) {
         if let Some(mut inner) = self.borrow_mut() {
             inner.set_opacity(cx, opacity);
+        }
+    }
+
+    pub fn set_status(&self, cx: &mut Cx, status: &str) {
+        if let Some(mut inner) = self.borrow_mut() {
+            inner.set_status(cx, status);
         }
     }
 
