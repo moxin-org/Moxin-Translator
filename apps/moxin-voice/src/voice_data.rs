@@ -319,27 +319,27 @@ fn qwen_voice_i18n(id: &str, locale: &str) -> (&'static str, &'static str) {
     let en = locale == "en";
     match id {
         "vivian"   => if en { ("Vivian",    "Bright, slightly edgy young female voice") }
-                      else  { ("薇薇安 (Vivian)",  "活泼灵动、略带个性的年轻女声") },
+                      else  { ("薇薇安",  "活泼灵动、略带个性的年轻女声") },
         "serena"   => if en { ("Serena",    "Warm, gentle young female voice") }
-                      else  { ("赛琳娜 (Serena)",  "温柔亲切的年轻女声") },
+                      else  { ("赛琳娜",  "温柔亲切的年轻女声") },
         "uncle_fu" => if en { ("Uncle Fu",  "Seasoned male voice with low, mellow timbre") }
-                      else  { ("傅叔 (Uncle Fu)", "低沉醇厚的成熟男声") },
+                      else  { ("傅叔", "低沉醇厚的成熟男声") },
         "dylan"    => if en { ("Dylan",     "Youthful Beijing male voice, clear and natural") }
-                      else  { ("迪伦 (Dylan)",    "清朗自然的北京青年男声") },
+                      else  { ("迪伦",    "清朗自然的北京青年男声") },
         "eric"     => if en { ("Eric",      "Lively Chengdu male voice with husky brightness") }
-                      else  { ("埃里克 (Eric)",   "活泼明亮的成都青年男声") },
+                      else  { ("埃里克",   "活泼明亮的成都青年男声") },
         // English-only speakers — same regardless of locale
         "ryan"     => ("Ryan",     "Dynamic male voice with strong rhythmic drive"),
         "aiden"    => ("Aiden",    "Sunny American male voice with clear midrange"),
         // Japanese / Korean — show romaji name with locale-aware description
         "ono_anna" => if en { ("Ono Anna",  "Playful Japanese female voice, light and nimble") }
-                      else  { ("小野安奈 (Ono Anna)", "轻快灵动的日本女声") },
+                      else  { ("小野安奈", "轻快灵动的日本女声") },
         "sohee"    => if en { ("Sohee",     "Warm Korean female voice with rich emotion") }
-                      else  { ("素熙 (Sohee)",   "情感丰富的韩国女声") },
+                      else  { ("素熙",   "情感丰富的韩国女声") },
         "baiyang"  => if en { ("Baiyang",   "Custom trained Chinese female voice") }
-                      else  { ("白杨 (Baiyang)", "自定义训练中文女声") },
+                      else  { ("白杨", "自定义训练中文女声") },
         "yangyang" => if en { ("Yangyang",  "Custom trained Chinese male voice") }
-                      else  { ("杨阳 (Yangyang)", "自定义训练中文男声") },
+                      else  { ("杨阳", "自定义训练中文男声") },
         _          => ("",         ""),
     }
 }
