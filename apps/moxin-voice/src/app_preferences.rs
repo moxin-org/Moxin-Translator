@@ -25,6 +25,9 @@ pub struct AppPreferences {
     pub preferred_output_device: Option<String>,
     pub preferred_input_device: Option<String>,
     pub tts_download_format: String, // "mp3" | "wav"
+    pub translation_auto_save_transcript: bool,
+    pub translation_transcript_file_name: String,
+    pub translation_transcript_save_dir: Option<String>,
     pub debug_logs_enabled: bool,
 }
 
@@ -46,6 +49,9 @@ impl Default for AppPreferences {
             preferred_output_device: None,
             preferred_input_device: None,
             tts_download_format: "mp3".to_string(),
+            translation_auto_save_transcript: false,
+            translation_transcript_file_name: "transcript.md".to_string(),
+            translation_transcript_save_dir: None,
             debug_logs_enabled: false,
         }
     }

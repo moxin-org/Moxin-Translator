@@ -67,6 +67,23 @@ pub fn offer_save_dialog(
     });
 }
 
+/// Write a transcript directly, without showing any confirmation or save dialog.
+/// No-op when `entries` is empty.
+pub fn save_direct(
+    path: &Path,
+    entries: &[(String, String)],
+    src_lang: &str,
+    tgt_lang: &str,
+) -> std::io::Result<()> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    save_as_md(path, entries, src_lang, tgt_lang)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Approximate UTC datetime string from the system clock.

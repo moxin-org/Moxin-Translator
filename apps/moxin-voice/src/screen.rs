@@ -4773,6 +4773,91 @@ live_design! {
                                     width: Fill, height: 38
                                 }
                             }
+
+                            transcript_section = <View> {
+                                width: Fill, height: Fit
+                                flow: Down
+                                spacing: 10
+
+                                transcript_title = <Label> {
+                                    width: Fit, height: Fit
+                                    draw_text: {
+                                        instance dark_mode: 0.0
+                                        text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
+                                        fn get_color(self) -> vec4 {
+                                            return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                        }
+                                    }
+                                    text: "Transcript Saving"
+                                }
+
+                                transcript_auto_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+
+                                    transcript_auto_dropdown = <SettingsDeviceDropDown> {
+                                        width: Fill, height: 38
+                                    }
+                                }
+
+                                transcript_file_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+                                    spacing: 6
+
+                                    transcript_file_label = <Label> {
+                                        width: Fit, height: Fit
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        text: "File Name"
+                                    }
+
+                                    transcript_file_input = <SettingsTextInput> {
+                                        width: Fill, height: 38
+                                        empty_text: "transcript.md"
+                                    }
+                                }
+
+                                transcript_location_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+                                    spacing: 6
+
+                                    transcript_location_label = <Label> {
+                                        width: Fit, height: Fit
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        text: "Save Location"
+                                    }
+
+                                    transcript_location_controls = <View> {
+                                        width: Fill, height: Fit
+                                        flow: Right
+                                        spacing: 8
+
+                                        transcript_location_input = <SettingsTextInput> {
+                                            width: Fill, height: 38
+                                            empty_text: "Downloads"
+                                        }
+
+                                        transcript_location_btn = <SettingsActionBtn> {
+                                            width: Fit, height: 38
+                                            padding: {left: 12, right: 12}
+                                            text: "Choose"
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         } // End profile_panel
@@ -9496,6 +9581,111 @@ impl Widget for TTSScreen {
             self.show_toast(cx, self.tr("下载格式已保存", "TTS Download format saved"));
         }
 
+        if let Some(idx) = self
+            .view
+            .drop_down(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_auto_row
+                    .transcript_auto_dropdown
+            ))
+            .changed(&actions)
+        {
+            self.app_preferences.translation_auto_save_transcript = idx == 1;
+            self.save_app_preferences_only(cx);
+            self.update_user_settings_page(cx);
+            self.show_toast(cx, self.tr("Transcript 保存设置已更新", "Transcript setting saved"));
+        }
+
+        if let Some(file_name) = self
+            .view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_file_row
+                    .transcript_file_input
+            ))
+            .changed(&actions)
+        {
+            self.app_preferences.translation_transcript_file_name =
+                Self::normalize_transcript_file_name(&file_name);
+            self.save_app_preferences_only(cx);
+        }
+
+        if let Some(save_dir) = self
+            .view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_location_row
+                    .transcript_location_controls
+                    .transcript_location_input
+            ))
+            .changed(&actions)
+        {
+            let save_dir = save_dir.trim();
+            self.app_preferences.translation_transcript_save_dir = if save_dir.is_empty() {
+                None
+            } else {
+                Some(save_dir.to_string())
+            };
+            self.save_app_preferences_only(cx);
+        }
+
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_location_row
+                    .transcript_location_controls
+                    .transcript_location_btn
+            ))
+            .clicked(&actions)
+        {
+            if let Some(folder) = rfd::FileDialog::new()
+                .set_title(self.tr("选择 Transcript 保存位置", "Choose Transcript Save Location").to_string())
+                .pick_folder()
+            {
+                self.app_preferences.translation_transcript_save_dir =
+                    Some(folder.to_string_lossy().to_string());
+                self.save_app_preferences_only(cx);
+                self.update_user_settings_page(cx);
+            }
+        }
+
         if self
             .view
             .button(ids!(
@@ -12707,6 +12897,54 @@ impl TTSScreen {
         self.refresh_update_affordances(cx);
     }
 
+    fn save_app_preferences_only(&mut self, cx: &mut Cx) {
+        if let Err(e) = app_preferences::save_preferences(&self.app_preferences) {
+            self.add_log(cx, &format!("[WARN] [prefs] Failed to save preferences: {}", e));
+        }
+    }
+
+    fn normalize_transcript_file_name(input: &str) -> String {
+        let trimmed = input.trim();
+        let fallback = "transcript.md";
+        let raw = if trimmed.is_empty() { fallback } else { trimmed };
+        let sanitized: String = raw
+            .chars()
+            .map(|c| match c {
+                '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+                _ => c,
+            })
+            .collect();
+        let sanitized = sanitized.trim();
+        if sanitized.is_empty() {
+            fallback.to_string()
+        } else if sanitized.to_lowercase().ends_with(".md") {
+            sanitized.to_string()
+        } else {
+            format!("{sanitized}.md")
+        }
+    }
+
+    fn transcript_default_save_dir() -> PathBuf {
+        dirs::home_dir()
+            .map(|home| home.join("Downloads"))
+            .filter(|path| path.exists())
+            .unwrap_or_else(|| PathBuf::from("."))
+    }
+
+    fn transcript_save_path_from_preferences(&self) -> PathBuf {
+        let dir = self
+            .app_preferences
+            .translation_transcript_save_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(Self::transcript_default_save_dir);
+        dir.join(Self::normalize_transcript_file_name(
+            &self.app_preferences.translation_transcript_file_name,
+        ))
+    }
+
     fn ready_update(&self) -> Option<&PreparedUpdate> {
         match &self.app_update_state {
             AppUpdateState::Ready(update) => Some(update),
@@ -13486,6 +13724,99 @@ impl TTSScreen {
                     .download_format_dropdown
             ))
             .set_selected_item(cx, download_format_idx);
+        self.view
+            .drop_down(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_auto_row
+                    .transcript_auto_dropdown
+            ))
+            .set_labels(
+                cx,
+                if en {
+                    vec!["Do not save".to_string(), "Save after stop".to_string()]
+                } else {
+                    vec!["不保存".to_string(), "停止后保存".to_string()]
+                },
+            );
+        self.view
+            .drop_down(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_auto_row
+                    .transcript_auto_dropdown
+            ))
+            .set_selected_item(
+                cx,
+                if self.app_preferences.translation_auto_save_transcript {
+                    1
+                } else {
+                    0
+                },
+            );
+        self.view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_file_row
+                    .transcript_file_input
+            ))
+            .set_text(
+                cx,
+                &Self::normalize_transcript_file_name(
+                    &self.app_preferences.translation_transcript_file_name,
+                ),
+            );
+        let transcript_dir = self
+            .app_preferences
+            .translation_transcript_save_dir
+            .clone()
+            .unwrap_or_else(|| {
+                Self::transcript_default_save_dir()
+                    .to_string_lossy()
+                    .to_string()
+            });
+        self.view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_location_row
+                    .transcript_location_controls
+                    .transcript_location_input
+            ))
+            .set_text(cx, &transcript_dir);
         self.view
             .drop_down(ids!(
                 content_wrapper
@@ -15668,6 +15999,103 @@ impl TTSScreen {
                     .download_format_label
             ))
             .set_text(cx, self.tr("TTS 下载格式", "TTS Download Format"));
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_title
+            ))
+            .set_text(cx, self.tr("发言稿保存", "Transcript Saving"));
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_file_row
+                    .transcript_file_label
+            ))
+            .set_text(cx, self.tr("文件名", "File Name"));
+        self.view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_file_row
+                    .transcript_file_input
+            ))
+            .set_empty_text(cx, "transcript.md".to_string());
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_location_row
+                    .transcript_location_label
+            ))
+            .set_text(cx, self.tr("保存位置", "Save Location"));
+        self.view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_location_row
+                    .transcript_location_controls
+                    .transcript_location_input
+            ))
+            .set_empty_text(cx, self.tr("下载目录", "Downloads").to_string());
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .user_settings_page
+                    .settings_scroll
+                    .settings_scroll_content
+                    .profile_panel
+                    .app_settings_card
+                    .transcript_section
+                    .transcript_location_row
+                    .transcript_location_controls
+                    .transcript_location_btn
+            ))
+            .set_text(cx, self.tr("选择", "Choose"));
 
         if !self.user_profile_customized {
             self.user_display_name = self.tr("用户", "User").to_string();
@@ -18927,13 +19355,7 @@ impl TTSScreen {
             shared.translation.set(None);
         }
 
-        // Offer to save the transcript if anything was recorded.
-        crate::transcript_export::offer_save_dialog(
-            history_snapshot,
-            self.translation_src_lang.clone(),
-            self.translation_tgt_lang.clone(),
-            self.is_english(),
-        );
+        self.save_translation_transcript_if_enabled(cx, &history_snapshot);
 
         if let Some(dora) = &self.translation_dora {
             let _ = dora.stop_dataflow();
@@ -18955,6 +19377,57 @@ impl TTSScreen {
                 cx,
                 "[INFO] [tts] Resuming TTS dataflow after translation stop...",
             );
+        }
+    }
+
+    fn save_translation_transcript_if_enabled(
+        &mut self,
+        cx: &mut Cx,
+        history_snapshot: &[(String, String)],
+    ) {
+        if !self.app_preferences.translation_auto_save_transcript || history_snapshot.is_empty() {
+            return;
+        }
+
+        let save_path = self.transcript_save_path_from_preferences();
+        match crate::transcript_export::save_direct(
+            &save_path,
+            history_snapshot,
+            &self.translation_src_lang,
+            &self.translation_tgt_lang,
+        ) {
+            Ok(()) => {
+                self.add_translation_log(
+                    cx,
+                    &format!(
+                        "[INFO] {}: {}",
+                        self.tr("Transcript 已保存", "Transcript saved"),
+                        save_path.display()
+                    ),
+                );
+                self.show_toast(
+                    cx,
+                    &format!(
+                        "{} {}",
+                        self.tr("Transcript 已保存：", "Transcript saved:"),
+                        save_path
+                            .file_name()
+                            .and_then(|name| name.to_str())
+                            .unwrap_or("transcript.md")
+                    ),
+                );
+            }
+            Err(err) => {
+                self.add_translation_log(
+                    cx,
+                    &format!(
+                        "[ERROR] {}: {}",
+                        self.tr("保存 Transcript 失败", "Failed to save transcript"),
+                        err
+                    ),
+                );
+                self.show_toast(cx, self.tr("保存 Transcript 失败", "Failed to save transcript"));
+            }
         }
     }
 
@@ -22021,6 +22494,27 @@ impl TTSScreen {
                 content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.download_format_section.download_format_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 220.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
+        self.view
+            .label(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_title))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .label(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_file_row.transcript_file_label))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .label(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_location_row.transcript_location_label))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_auto_row.transcript_auto_dropdown))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 220.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
+        self.view
+            .text_input(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_file_row.transcript_file_input))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .text_input(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_location_row.transcript_location_controls.transcript_location_input))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_location_row.transcript_location_controls.transcript_location_btn))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
         self.view
             .view(ids!(
                 content_wrapper
