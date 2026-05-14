@@ -830,53 +830,50 @@ live_design! {
         }
     }
 
-    VoicePickerTagChip = <View> {
+    VoicePickerTagChip = <Button> {
         width: Fit, height: 22
-        padding: {left: 8, right: 8, top: 0, bottom: 0}
-        align: {y: 0.5}
-        show_bg: true
+        padding: {left: 7, right: 7}
         draw_bg: {
             instance dark_mode: 0.0
             instance tone: 0.0
             fn pixel(self) -> vec4 {
                 let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                let radius = self.rect_size.y * 0.5;
-                sdf.box(0.5, 0.5, self.rect_size.x - 1.0, self.rect_size.y - 1.0, radius);
+                let r = self.rect_size.y * 0.5;
                 let gender_light = vec4(0.90, 0.95, 1.0, 1.0);
-                let gender_dark = vec4(0.16, 0.27, 0.42, 1.0);
-                let lang_light = vec4(0.94, 0.95, 0.97, 1.0);
-                let lang_dark = vec4(0.28, 0.32, 0.39, 1.0);
-                let trait_light = vec4(0.92, 0.96, 0.90, 1.0);
-                let trait_dark = vec4(0.18, 0.32, 0.22, 1.0);
+                let gender_dark = vec4(0.18, 0.30, 0.48, 1.0);
+                let lang_light = vec4(0.92, 0.94, 0.97, 1.0);
+                let lang_dark = vec4(0.30, 0.35, 0.43, 1.0);
+                let trait_light = vec4(0.88, 0.96, 0.89, 1.0);
+                let trait_dark = vec4(0.17, 0.36, 0.22, 1.0);
                 let light = mix(mix(gender_light, lang_light, self.tone), trait_light, max(0.0, self.tone - 1.0));
                 let dark = mix(mix(gender_dark, lang_dark, self.tone), trait_dark, max(0.0, self.tone - 1.0));
-                sdf.fill(mix(light, dark, self.dark_mode));
-                let border_light = mix(mix(vec4(0.70, 0.82, 1.0, 1.0), vec4(0.78, 0.81, 0.86, 1.0), self.tone), vec4(0.70, 0.86, 0.70, 1.0), max(0.0, self.tone - 1.0));
-                let border_dark = mix(mix(vec4(0.32, 0.46, 0.68, 1.0), vec4(0.44, 0.48, 0.56, 1.0), self.tone), vec4(0.34, 0.54, 0.36, 1.0), max(0.0, self.tone - 1.0));
-                sdf.stroke(mix(border_light, border_dark, self.dark_mode), 1.0);
+                let bg = mix(light, dark, self.dark_mode);
+                sdf.circle(r, r, r);
+                sdf.fill(bg);
+                sdf.rect(r, 0., max(0.0, self.rect_size.x - self.rect_size.y), self.rect_size.y);
+                sdf.fill(bg);
+                sdf.circle(self.rect_size.x - r, r, r);
+                sdf.fill(bg);
                 return sdf.result;
             }
         }
-        tag_label = <Label> {
-            width: Fit, height: Fit
-            draw_text: {
-                instance dark_mode: 0.0
-                instance tone: 0.0
-                text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
-                fn get_color(self) -> vec4 {
-                    let gender_light = (PRIMARY_700);
-                    let gender_dark = (PRIMARY_200);
-                    let lang_light = (TEXT_SECONDARY);
-                    let lang_dark = (TEXT_SECONDARY_DARK);
-                    let trait_light = vec4(0.20, 0.52, 0.30, 1.0);
-                    let trait_dark = vec4(0.68, 0.90, 0.72, 1.0);
-                    let light = mix(mix(gender_light, lang_light, self.tone), trait_light, max(0.0, self.tone - 1.0));
-                    let dark = mix(mix(gender_dark, lang_dark, self.tone), trait_dark, max(0.0, self.tone - 1.0));
-                    return mix(light, dark, self.dark_mode);
-                }
+        draw_text: {
+            instance dark_mode: 0.0
+            instance tone: 0.0
+            text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
+            fn get_color(self) -> vec4 {
+                let gender_light = (PRIMARY_700);
+                let gender_dark = (PRIMARY_200);
+                let lang_light = (TEXT_SECONDARY);
+                let lang_dark = (TEXT_SECONDARY_DARK);
+                let trait_light = vec4(0.15, 0.47, 0.24, 1.0);
+                let trait_dark = vec4(0.70, 0.92, 0.72, 1.0);
+                let light = mix(mix(gender_light, lang_light, self.tone), trait_light, max(0.0, self.tone - 1.0));
+                let dark = mix(mix(gender_dark, lang_dark, self.tone), trait_dark, max(0.0, self.tone - 1.0));
+                return mix(light, dark, self.dark_mode);
             }
-            text: "Tag"
         }
+        text: "Tag"
     }
 
     SettingsBodyLabel = <Label> {
@@ -2561,10 +2558,10 @@ live_design! {
                                     VoicePickerItem = <View> {
                                         width: Fill, height: Fit
                                         margin: {left: 0, right: 0, top: 0, bottom: 0}
-                                        padding: {left: 12, right: 10, top: 6, bottom: 7}
+                                        padding: {left: 12, right: 4, top: 6, bottom: 7}
                                         flow: Right
                                         align: {y: 0.0}
-                                        spacing: 10
+                                        spacing: 8
                                         cursor: Hand
 
                                         show_bg: true
@@ -2618,18 +2615,59 @@ live_design! {
                                             flow: Down
                                             spacing: 4
 
-                                            picker_name = <Label> {
+                                            picker_header_row = <View> {
                                                 width: Fill, height: Fit
-                                                padding: {top: 2, bottom: 0}
-                                                draw_text: {
-                                                    instance dark_mode: 0.0
-                                                    text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
-                                                    wrap: Ellipsis
-                                                    fn get_color(self) -> vec4 {
-                                                        return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                                flow: Right
+                                                align: {y: 0.0}
+                                                spacing: 8
+
+                                                picker_name = <Label> {
+                                                    width: Fill, height: Fit
+                                                    padding: {top: 2, bottom: 0}
+                                                    draw_text: {
+                                                        instance dark_mode: 0.0
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
+                                                        wrap: Ellipsis
+                                                        fn get_color(self) -> vec4 {
+                                                            return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                                        }
+                                                    }
+                                                    text: "Voice Name"
+                                                }
+
+                                                picker_play_btn = <View> {
+                                                    width: 30, height: 30
+                                                    align: {x: 0.5, y: 0.5}
+                                                    cursor: Hand
+                                                    show_bg: true
+                                                    draw_bg: {
+                                                        instance dark_mode: 0.0
+                                                        instance hover: 0.0
+                                                        instance playing: 0.0
+                                                        fn pixel(self) -> vec4 {
+                                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                            sdf.circle(15.0, 15.0, 15.0);
+                                                            let base = mix((SLATE_100), (SLATE_700), self.dark_mode);
+                                                            let hover_bg = mix((SLATE_200), (SLATE_600), self.dark_mode);
+                                                            let bg = mix(base, hover_bg, self.hover);
+                                                            let icon = mix((SLATE_600), (SLATE_200), self.dark_mode);
+                                                            sdf.fill(bg);
+                                                            if self.playing > 0.5 {
+                                                                sdf.rect(10.0, 9.0, 3.0, 11.0);
+                                                                sdf.fill(icon);
+                                                                sdf.rect(17.0, 9.0, 3.0, 11.0);
+                                                                sdf.fill(icon);
+                                                            } else {
+                                                                sdf.move_to(11.0, 9.0);
+                                                                sdf.line_to(20.0, 15.0);
+                                                                sdf.line_to(11.0, 21.0);
+                                                                sdf.close_path();
+                                                                sdf.fill(icon);
+                                                            }
+                                                            return sdf.result;
+                                                        }
                                                     }
                                                 }
-                                                text: "Voice Name"
                                             }
                                             picker_desc = <Label> {
                                                 width: Fill, height: Fit
@@ -2645,46 +2683,12 @@ live_design! {
 
                                             picker_tags_row = <View> {
                                                 width: Fill, height: Fit
-                                                flow: Right { wrap: true }
-                                                spacing: 4
+                                                flow: Right { wrap: false }
+                                                spacing: 3
 
                                                 gender_tag = <VoicePickerTagChip> {}
                                                 language_tag = <VoicePickerTagChip> {}
                                                 trait_tag = <VoicePickerTagChip> {}
-                                            }
-                                        }
-
-                                        picker_play_btn = <View> {
-                                            width: 30, height: 30
-                                            align: {x: 0.5, y: 0.5}
-                                            cursor: Hand
-                                            show_bg: true
-                                            draw_bg: {
-                                                instance dark_mode: 0.0
-                                                instance hover: 0.0
-                                                instance playing: 0.0
-                                                fn pixel(self) -> vec4 {
-                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                    sdf.circle(15.0, 15.0, 15.0);
-                                                    let base = mix((SLATE_100), (SLATE_700), self.dark_mode);
-                                                    let hover_bg = mix((SLATE_200), (SLATE_600), self.dark_mode);
-                                                    let bg = mix(base, hover_bg, self.hover);
-                                                    let icon = mix((SLATE_600), (SLATE_200), self.dark_mode);
-                                                    sdf.fill(bg);
-                                                    if self.playing > 0.5 {
-                                                        sdf.rect(10.0, 9.0, 3.0, 11.0);
-                                                        sdf.fill(icon);
-                                                        sdf.rect(17.0, 9.0, 3.0, 11.0);
-                                                        sdf.fill(icon);
-                                                    } else {
-                                                        sdf.move_to(11.0, 9.0);
-                                                        sdf.line_to(20.0, 15.0);
-                                                        sdf.line_to(11.0, 21.0);
-                                                        sdf.close_path();
-                                                        sdf.fill(icon);
-                                                    }
-                                                    return sdf.result;
-                                                }
                                             }
                                         }
                                     }
@@ -7263,18 +7267,59 @@ live_design! {
                             flow: Down
                             spacing: 8
 
-                            picker_name = <Label> {
+                            picker_header_row = <View> {
                                 width: Fill, height: Fit
-                                padding: {top: 4, bottom: 2}
-                                draw_text: {
-                                    instance dark_mode: 0.0
-                                    text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
-                                    wrap: Ellipsis
-                                    fn get_color(self) -> vec4 {
-                                        return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                flow: Right
+                                align: {y: 0.0}
+                                spacing: 10
+
+                                picker_name = <Label> {
+                                    width: Fill, height: Fit
+                                    padding: {top: 4, bottom: 2}
+                                    draw_text: {
+                                        instance dark_mode: 0.0
+                                        text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
+                                        wrap: Ellipsis
+                                        fn get_color(self) -> vec4 {
+                                            return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                        }
+                                    }
+                                    text: "Voice Name"
+                                }
+
+                                picker_play_btn = <View> {
+                                    width: 34, height: 34
+                                    align: {x: 0.5, y: 0.5}
+                                    cursor: Hand
+                                    show_bg: true
+                                    draw_bg: {
+                                        instance dark_mode: 0.0
+                                        instance hover: 0.0
+                                        instance playing: 0.0
+                                        fn pixel(self) -> vec4 {
+                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                            sdf.circle(17.0, 17.0, 17.0);
+                                            let base = mix((SLATE_100), (SLATE_700), self.dark_mode);
+                                            let hover_bg = mix((SLATE_200), (SLATE_600), self.dark_mode);
+                                            let bg = mix(base, hover_bg, self.hover);
+                                            let icon = mix((SLATE_600), (SLATE_200), self.dark_mode);
+                                            sdf.fill(bg);
+                                            if self.playing > 0.5 {
+                                                sdf.rect(12.0, 11.0, 3.0, 12.0);
+                                                sdf.fill(icon);
+                                                sdf.rect(19.0, 11.0, 3.0, 12.0);
+                                                sdf.fill(icon);
+                                            } else {
+                                                sdf.move_to(13.0, 11.0);
+                                                sdf.line_to(23.0, 17.0);
+                                                sdf.line_to(13.0, 23.0);
+                                                sdf.close_path();
+                                                sdf.fill(icon);
+                                            }
+                                            return sdf.result;
+                                        }
                                     }
                                 }
-                                text: "Voice Name"
                             }
                             picker_desc = <Label> {
                                 width: Fill, height: Fit
@@ -7286,40 +7331,6 @@ live_design! {
                                     }
                                 }
                                 text: "Voice description"
-                            }
-                        }
-
-                        picker_play_btn = <View> {
-                            width: 34, height: 34
-                            align: {x: 0.5, y: 0.5}
-                            cursor: Hand
-                            show_bg: true
-                            draw_bg: {
-                                instance dark_mode: 0.0
-                                instance hover: 0.0
-                                instance playing: 0.0
-                                fn pixel(self) -> vec4 {
-                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                    sdf.circle(17.0, 17.0, 17.0);
-                                    let base = mix((SLATE_100), (SLATE_700), self.dark_mode);
-                                    let hover_bg = mix((SLATE_200), (SLATE_600), self.dark_mode);
-                                    let bg = mix(base, hover_bg, self.hover);
-                                    let icon = mix((SLATE_600), (SLATE_200), self.dark_mode);
-                                    sdf.fill(bg);
-                                    if self.playing > 0.5 {
-                                        sdf.rect(12.0, 11.0, 3.0, 12.0);
-                                        sdf.fill(icon);
-                                        sdf.rect(19.0, 11.0, 3.0, 12.0);
-                                        sdf.fill(icon);
-                                    } else {
-                                        sdf.move_to(13.0, 11.0);
-                                        sdf.line_to(23.0, 17.0);
-                                        sdf.line_to(13.0, 23.0);
-                                        sdf.close_path();
-                                        sdf.fill(icon);
-                                    }
-                                    return sdf.result;
-                                }
                             }
                         }
                     }
@@ -12540,19 +12551,15 @@ impl Widget for TTSScreen {
                             let item = list.item(cx, item_id, live_id!(VoicePickerItem));
                             item.label(ids!(picker_avatar.picker_initial))
                                 .set_text(cx, &initial);
-                            item.label(ids!(picker_info.picker_name))
+                            item.label(ids!(picker_info.picker_header_row.picker_name))
                                 .set_text(cx, &name);
                             item.label(ids!(picker_info.picker_desc))
                                 .set_text(cx, &desc);
-                            item.label(ids!(
-                                picker_info.picker_tags_row.gender_tag.tag_label
-                            ))
-                            .set_text(cx, &gender_tag);
-                            item.label(ids!(
-                                picker_info.picker_tags_row.language_tag.tag_label
-                            ))
-                            .set_text(cx, &language_tag);
-                            item.label(ids!(picker_info.picker_tags_row.trait_tag.tag_label))
+                            item.button(ids!(picker_info.picker_tags_row.gender_tag))
+                                .set_text(cx, &gender_tag);
+                            item.button(ids!(picker_info.picker_tags_row.language_tag))
+                                .set_text(cx, &language_tag);
+                            item.button(ids!(picker_info.picker_tags_row.trait_tag))
                                 .set_text(cx, &trait_tag);
 
                             item.apply_over(
@@ -12561,7 +12568,7 @@ impl Widget for TTSScreen {
                                     draw_bg: { dark_mode: (dark_mode), selected: (selected) }
                                 },
                             );
-                            item.label(ids!(picker_info.picker_name)).apply_over(
+                            item.label(ids!(picker_info.picker_header_row.picker_name)).apply_over(
                                 cx,
                                 live! {
                                     draw_text: { dark_mode: (dark_mode) }
@@ -12573,23 +12580,13 @@ impl Widget for TTSScreen {
                                     draw_text: { dark_mode: (dark_mode) }
                                 },
                             );
-                            item.view(ids!(picker_info.picker_tags_row.gender_tag))
-                                .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode), tone: 0.0 } });
-                            item.label(ids!(
-                                picker_info.picker_tags_row.gender_tag.tag_label
-                            ))
-                            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode), tone: 0.0 } });
-                            item.view(ids!(picker_info.picker_tags_row.language_tag))
-                                .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode), tone: 1.0 } });
-                            item.label(ids!(
-                                picker_info.picker_tags_row.language_tag.tag_label
-                            ))
-                            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode), tone: 1.0 } });
-                            item.view(ids!(picker_info.picker_tags_row.trait_tag))
-                                .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode), tone: 2.0 } });
-                            item.label(ids!(picker_info.picker_tags_row.trait_tag.tag_label))
-                                .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode), tone: 2.0 } });
-                            item.view(ids!(picker_play_btn)).apply_over(
+                            item.button(ids!(picker_info.picker_tags_row.gender_tag))
+                                .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode), tone: 0.0 } draw_text: { dark_mode: (dark_mode), tone: 0.0 } });
+                            item.button(ids!(picker_info.picker_tags_row.language_tag))
+                                .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode), tone: 1.0 } draw_text: { dark_mode: (dark_mode), tone: 1.0 } });
+                            item.button(ids!(picker_info.picker_tags_row.trait_tag))
+                                .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode), tone: 2.0 } draw_text: { dark_mode: (dark_mode), tone: 2.0 } });
+                            item.view(ids!(picker_info.picker_header_row.picker_play_btn)).apply_over(
                                 cx,
                                 live! {
                                     draw_bg: { dark_mode: (dark_mode), playing: (playing) }
@@ -12599,7 +12596,7 @@ impl Widget for TTSScreen {
                             item.draw_all(cx, &mut Scope::empty());
 
                             let item_area = item.area();
-                            let play_area = item.view(ids!(picker_play_btn)).area();
+                            let play_area = item.view(ids!(picker_info.picker_header_row.picker_play_btn)).area();
                             self.voice_picker_item_areas
                                 .push((item_id, item_area, play_area));
                         }
