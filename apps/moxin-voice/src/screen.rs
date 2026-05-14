@@ -8394,6 +8394,12 @@ pub struct TTSScreen {
     /// Timer for polling metrics (CPU/MEM) while running
     #[rust]
     translation_metrics_timer: Timer,
+    /// Periodic timer for automatic transcript snapshots.
+    #[rust]
+    translation_transcript_autosave_timer: Timer,
+    /// Number of completed translation sentences already saved by periodic autosave.
+    #[rust]
+    translation_transcript_autosave_cursor: usize,
     /// Last translation entry mirrored into the in-app log (for de-dup without consuming dirty state)
     #[rust]
     translation_last_logged_fingerprint: Option<String>,
@@ -8698,6 +8704,8 @@ impl Widget for TTSScreen {
             self.translation_tgt_lang = "en".to_string();
             self.translation_log_lines = Vec::new();
             self.translation_metrics_timer = Timer::default();
+            self.translation_transcript_autosave_timer = Timer::default();
+            self.translation_transcript_autosave_cursor = 0;
             self.translation_last_logged_fingerprint = None;
             self.translation_audio_devices = Vec::new();
             self.translation_device_idx = 0; // 0 = System Audio, 1 = System Default Mic
@@ -8791,6 +8799,15 @@ impl Widget for TTSScreen {
         // Translation metrics polling (1s)
         if self.translation_metrics_timer.is_event(event).is_some() && self.translation_running {
             self.poll_translation_metrics(cx);
+        }
+
+        if self
+            .translation_transcript_autosave_timer
+            .is_event(event)
+            .is_some()
+            && self.translation_running
+        {
+            self.autosave_translation_transcript(cx);
         }
 
         // Screen-recording permission probe result (fires 2 s after navigating to translation page)
@@ -9670,7 +9687,9 @@ impl Widget for TTSScreen {
             .changed(&actions)
         {
             self.app_preferences.translation_auto_save_transcript = idx == 1;
+            self.app_preferences.translation_periodic_save_transcript = idx == 2;
             self.save_app_preferences_only(cx);
+            self.sync_translation_transcript_autosave_timer(cx);
             self.update_user_settings_page(cx);
             self.show_toast(cx, self.tr("Transcript 保存设置已更新", "Transcript setting saved"));
         }
@@ -13029,6 +13048,42 @@ impl TTSScreen {
         ))
     }
 
+    fn transcript_timestamp() -> String {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis().to_string())
+            .unwrap_or_else(|_| "0".to_string())
+    }
+
+    fn transcript_timestamped_save_path_from_preferences(&self) -> PathBuf {
+        let base_path = self.transcript_save_path_from_preferences();
+        let timestamp = Self::transcript_timestamp();
+        let stem = base_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("transcript");
+        let extension = base_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("md");
+        base_path.with_file_name(format!("{stem}_{timestamp}.{extension}"))
+    }
+
+    fn translation_history_snapshot(&self) -> Vec<(String, String)> {
+        self.translation_shared_state()
+            .and_then(|shared| shared.translation.read())
+            .map(|update| {
+                update
+                    .history
+                    .iter()
+                    .map(|s| (s.source_text.clone(), s.translation.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     fn ready_update(&self) -> Option<&PreparedUpdate> {
         match &self.app_update_state {
             AppUpdateState::Ready(update) => Some(update),
@@ -13826,9 +13881,17 @@ impl TTSScreen {
             .set_labels(
                 cx,
                 if en {
-                    vec!["Do not save".to_string(), "Save after stop".to_string()]
+                    vec![
+                        "Do not save".to_string(),
+                        "Save after stop".to_string(),
+                        "Auto save".to_string(),
+                    ]
                 } else {
-                    vec!["不保存".to_string(), "停止后保存".to_string()]
+                    vec![
+                        "不保存".to_string(),
+                        "停止后保存".to_string(),
+                        "自动保存".to_string(),
+                    ]
                 },
             );
         self.view
@@ -13848,7 +13911,9 @@ impl TTSScreen {
             ))
             .set_selected_item(
                 cx,
-                if self.app_preferences.translation_auto_save_transcript {
+                if self.app_preferences.translation_periodic_save_transcript {
+                    2
+                } else if self.app_preferences.translation_auto_save_transcript {
                     1
                 } else {
                     0
@@ -18898,9 +18963,14 @@ impl TTSScreen {
                             self.tr("翻译数据流已停止", "Translation dataflow stopped")
                         ),
                     );
+                    if self.translation_running {
+                        let history_snapshot = self.translation_history_snapshot();
+                        self.save_translation_transcript_on_stop(cx, &history_snapshot);
+                    }
                     self.translation_running = false;
                     self.show_translation_running_panel(cx, false);
                     cx.stop_timer(self.translation_metrics_timer);
+                    self.stop_translation_transcript_autosave_timer(cx);
                 }
                 crate::dora_integration::DoraEvent::Error { message } => {
                     self.add_translation_log(
@@ -18911,9 +18981,14 @@ impl TTSScreen {
                             message
                         ),
                     );
+                    if self.translation_running {
+                        let history_snapshot = self.translation_history_snapshot();
+                        self.save_translation_transcript_on_stop(cx, &history_snapshot);
+                    }
                     self.translation_running = false;
                     self.show_translation_running_panel(cx, false);
                     cx.stop_timer(self.translation_metrics_timer);
+                    self.stop_translation_transcript_autosave_timer(cx);
                 }
                 crate::dora_integration::DoraEvent::AsrTranscription { .. } => {}
             }
@@ -19405,10 +19480,12 @@ impl TTSScreen {
 
         // Switch to running view
         self.translation_running = true;
+        self.translation_transcript_autosave_cursor = 0;
         self.show_translation_running_panel(cx, true);
 
         // Start metrics polling timer (1s interval)
         self.translation_metrics_timer = cx.start_interval(1.0);
+        self.sync_translation_transcript_autosave_timer(cx);
     }
 
     /// Stop the translation dataflow and return to settings view.
@@ -19422,17 +19499,7 @@ impl TTSScreen {
         );
 
         // Capture translation history before clearing shared state.
-        let history_snapshot: Vec<(String, String)> = self
-            .translation_shared_state()
-            .and_then(|shared| shared.translation.read())
-            .map(|update| {
-                update
-                    .history
-                    .iter()
-                    .map(|s| (s.source_text.clone(), s.translation.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let history_snapshot = self.translation_history_snapshot();
 
         // Keep the overlay window open — only clear the translation data.
         // The window stays visible until the user closes it manually.
@@ -19442,7 +19509,7 @@ impl TTSScreen {
             shared.translation_overlay_status.set("idle".to_string());
         }
 
-        self.save_translation_transcript_if_enabled(cx, &history_snapshot);
+        self.save_translation_transcript_on_stop(cx, &history_snapshot);
 
         if let Some(dora) = &self.translation_dora {
             let _ = dora.stop_dataflow();
@@ -19454,6 +19521,7 @@ impl TTSScreen {
 
         // Stop metrics timer
         cx.stop_timer(self.translation_metrics_timer);
+        self.stop_translation_transcript_autosave_timer(cx);
 
         // Resume TTS dataflow if it was paused for translation.
         if self.tts_paused_for_translation {
@@ -19467,21 +19535,71 @@ impl TTSScreen {
         }
     }
 
-    fn save_translation_transcript_if_enabled(
+    fn save_translation_transcript_on_stop(
         &mut self,
         cx: &mut Cx,
         history_snapshot: &[(String, String)],
     ) {
-        if !self.app_preferences.translation_auto_save_transcript || history_snapshot.is_empty() {
+        if history_snapshot.is_empty() {
+            return;
+        }
+
+        if self.app_preferences.translation_periodic_save_transcript {
+            self.save_translation_transcript_autosave_batch(cx, history_snapshot, true);
+            return;
+        }
+
+        if !self.app_preferences.translation_auto_save_transcript {
             return;
         }
 
         let save_path = self.transcript_save_path_from_preferences();
-        match crate::transcript_export::save_direct(
+        self.save_translation_transcript_snapshot(cx, history_snapshot, save_path, 1, true);
+    }
+
+    fn autosave_translation_transcript(&mut self, cx: &mut Cx) {
+        if !self.app_preferences.translation_periodic_save_transcript {
+            return;
+        }
+        let history_snapshot = self.translation_history_snapshot();
+        self.save_translation_transcript_autosave_batch(cx, &history_snapshot, false);
+    }
+
+    fn save_translation_transcript_autosave_batch(
+        &mut self,
+        cx: &mut Cx,
+        history_snapshot: &[(String, String)],
+        show_toast: bool,
+    ) {
+        let start = self
+            .translation_transcript_autosave_cursor
+            .min(history_snapshot.len());
+        if start >= history_snapshot.len() {
+            return;
+        }
+        let entries = &history_snapshot[start..];
+        let save_path = self.transcript_timestamped_save_path_from_preferences();
+        let first_index = start + 1;
+        if self.save_translation_transcript_snapshot(cx, entries, save_path, first_index, show_toast)
+        {
+            self.translation_transcript_autosave_cursor = history_snapshot.len();
+        }
+    }
+
+    fn save_translation_transcript_snapshot(
+        &mut self,
+        cx: &mut Cx,
+        history_snapshot: &[(String, String)],
+        save_path: PathBuf,
+        first_index: usize,
+        show_toast: bool,
+    ) -> bool {
+        match crate::transcript_export::save_direct_with_start_index(
             &save_path,
             history_snapshot,
             &self.translation_src_lang,
             &self.translation_tgt_lang,
+            first_index,
         ) {
             Ok(()) => {
                 self.add_translation_log(
@@ -19492,17 +19610,20 @@ impl TTSScreen {
                         save_path.display()
                     ),
                 );
-                self.show_toast(
-                    cx,
-                    &format!(
-                        "{} {}",
-                        self.tr("Transcript 已保存：", "Transcript saved:"),
-                        save_path
-                            .file_name()
-                            .and_then(|name| name.to_str())
-                            .unwrap_or("transcript.md")
-                    ),
-                );
+                if show_toast {
+                    self.show_toast(
+                        cx,
+                        &format!(
+                            "{} {}",
+                            self.tr("Transcript 已保存：", "Transcript saved:"),
+                            save_path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .unwrap_or("transcript.md")
+                        ),
+                    );
+                }
+                true
             }
             Err(err) => {
                 self.add_translation_log(
@@ -19513,9 +19634,24 @@ impl TTSScreen {
                         err
                     ),
                 );
-                self.show_toast(cx, self.tr("保存 Transcript 失败", "Failed to save transcript"));
+                if show_toast {
+                    self.show_toast(cx, self.tr("保存 Transcript 失败", "Failed to save transcript"));
+                }
+                false
             }
         }
+    }
+
+    fn sync_translation_transcript_autosave_timer(&mut self, cx: &mut Cx) {
+        self.stop_translation_transcript_autosave_timer(cx);
+        if self.translation_running && self.app_preferences.translation_periodic_save_transcript {
+            self.translation_transcript_autosave_timer = cx.start_interval(60.0);
+        }
+    }
+
+    fn stop_translation_transcript_autosave_timer(&mut self, cx: &mut Cx) {
+        cx.stop_timer(self.translation_transcript_autosave_timer);
+        self.translation_transcript_autosave_timer = Timer::default();
     }
 
     /// Poll translation updates and mirror completed entries to the log.

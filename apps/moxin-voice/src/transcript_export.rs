@@ -60,7 +60,7 @@ pub fn offer_save_dialog(
 
     // Dispatch the (potentially slow) write to a background thread.
     std::thread::spawn(move || {
-        match save_as_md(&path, &entries, &src_lang, &tgt_lang) {
+        match save_as_md(&path, &entries, &src_lang, &tgt_lang, 1) {
             Ok(()) => log::info!("[transcript] Saved to {:?}", path),
             Err(e) => log::error!("[transcript] Failed to save: {}", e),
         }
@@ -75,13 +75,25 @@ pub fn save_direct(
     src_lang: &str,
     tgt_lang: &str,
 ) -> std::io::Result<()> {
+    save_direct_with_start_index(path, entries, src_lang, tgt_lang, 1)
+}
+
+/// Write a transcript directly with a custom first sentence number.
+/// No-op when `entries` is empty.
+pub fn save_direct_with_start_index(
+    path: &Path,
+    entries: &[(String, String)],
+    src_lang: &str,
+    tgt_lang: &str,
+    first_index: usize,
+) -> std::io::Result<()> {
     if entries.is_empty() {
         return Ok(());
     }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    save_as_md(path, entries, src_lang, tgt_lang)
+    save_as_md(path, entries, src_lang, tgt_lang, first_index.max(1))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -135,6 +147,7 @@ fn save_as_md(
     entries: &[(String, String)],
     src_lang: &str,
     tgt_lang: &str,
+    first_index: usize,
 ) -> std::io::Result<()> {
     let passthrough = tgt_lang.eq_ignore_ascii_case("none");
     let mut out = String::new();
@@ -148,7 +161,7 @@ fn save_as_md(
     out.push_str("---\n\n");
 
     for (i, (src, tl)) in entries.iter().enumerate() {
-        out.push_str(&format!("**[{:03}]**\n\n", i + 1));
+        out.push_str(&format!("**[{:03}]**\n\n", first_index + i));
         out.push_str(&format!("> {}\n\n", src.trim()));
         let tl_trimmed = tl.trim();
         if !tl_trimmed.is_empty() {
