@@ -5806,84 +5806,31 @@ live_design! {
                                 }
                             } // End translation_settings_panel
 
-                            // 始终占位的 Fill 容器：保证 action button 钉在底部，
-                            // 即使日志卡片在未启动时被隐藏也不影响布局。
+                            // Fill placeholder so the action button stays pinned
+                            // to the bottom. Hosts a thin warming/listening status
+                            // badge that becomes visible while a dataflow is running.
+                            // (Previously this area also showed a runtime-logs panel
+                            // backed by a single Label whose text grew on every dora
+                            // event; that path leaked unbounded memory through
+                            // Makepad's text layouter and has been removed.)
                             translation_log_area = <View> {
                                 width: Fill, height: Fill
                                 flow: Down
 
-                            // ── 运行日志卡片（启动后才显示，位于设置下方）─────
-                            translation_log_card = <RoundedView> {
-                                width: Fill, height: Fill
-                                flow: Down
-                                spacing: 0
+                            translation_log_card = <View> {
+                                width: Fill, height: Fit
+                                flow: Right
+                                align: {y: 0.5}
+                                padding: {left: 4, right: 4, top: 6, bottom: 6}
                                 visible: false
-                                show_bg: true
-                                draw_bg: {
-                                    instance dark_mode: 0.0
-                                    instance border_radius: 10.0
-                                    fn pixel(self) -> vec4 {
-                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                        sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                        sdf.fill(mix((WHITE), (SLATE_800), self.dark_mode));
-                                        sdf.stroke(mix((SLATE_200), (SLATE_700), self.dark_mode), 1.0);
-                                        return sdf.result;
+
+                                translation_overlay_status_badge = <Label> {
+                                    width: Fit, height: Fit
+                                    draw_text: {
+                                        text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                        color: #E59A34
                                     }
-                                }
-
-                                // 日志头：左侧标题，右侧 warming/listening 状态
-                                <View> {
-                                    width: Fill, height: 36
-                                    flow: Right
-                                    align: {y: 0.5}
-                                    padding: {left: 14, right: 14}
-                                    spacing: 8
-
-                                    translation_log_title = <Label> {
-                                        width: Fill, height: Fit
-                                        draw_text: {
-                                            instance dark_mode: 0.0
-                                            text_style: <FONT_SEMIBOLD>{ font_size: 12.0 }
-                                            fn get_color(self) -> vec4 { return mix((MOXIN_TEXT_SECONDARY), (MOXIN_TEXT_SECONDARY_DARK), self.dark_mode); }
-                                        }
-                                        text: "Runtime Logs"
-                                    }
-
-                                    translation_overlay_status_badge = <Label> {
-                                        width: Fit, height: Fit
-                                        draw_text: {
-                                            text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                            color: #E59A34
-                                        }
-                                        text: "● WARMING UP"
-                                    }
-                                }
-
-                                <View> {
-                                    width: Fill, height: 1
-                                    show_bg: true
-                                    draw_bg: {
-                                        instance dark_mode: 0.0
-                                        fn pixel(self) -> vec4 { return mix((SLATE_100), (SLATE_700), self.dark_mode); }
-                                    }
-                                }
-
-                                translation_log_scroll = <ScrollYView> {
-                                    width: Fill, height: Fill
-                                    flow: Down
-                                    padding: {left: 14, right: 14, top: 10, bottom: 10}
-                                    spacing: 2
-
-                                    translation_log_label = <Label> {
-                                        width: Fill, height: Fit
-                                        draw_text: {
-                                            instance dark_mode: 0.0
-                                            text_style: <FONT_REGULAR>{ font_size: 11.5 }
-                                            wrap: Word
-                                            fn get_color(self) -> vec4 { return mix(vec4(0.3,0.35,0.42,1.0), vec4(0.65,0.7,0.78,1.0), self.dark_mode); }
-                                        }
-                                        text: ""
-                                    }
+                                    text: "● WARMING UP"
                                 }
                             } // End translation_log_card
                             } // End translation_log_area
@@ -8388,9 +8335,6 @@ pub struct TTSScreen {
     /// Target language code, e.g. "en"
     #[rust]
     translation_tgt_lang: String,
-    /// Log lines displayed in the running panel
-    #[rust]
-    translation_log_lines: Vec<String>,
     /// Timer for polling metrics (CPU/MEM) while running
     #[rust]
     translation_metrics_timer: Timer,
@@ -8702,7 +8646,6 @@ impl Widget for TTSScreen {
             self.translation_running = false;
             self.translation_src_lang = "zh".to_string();
             self.translation_tgt_lang = "en".to_string();
-            self.translation_log_lines = Vec::new();
             self.translation_metrics_timer = Timer::default();
             self.translation_transcript_autosave_timer = Timer::default();
             self.translation_transcript_autosave_cursor = 0;
@@ -14345,19 +14288,6 @@ impl TTSScreen {
                 "屏幕录制权限未授权。请前往系统设置 → 隐私与安全性 → 屏幕录制，启用 Moxin Voice，然后重启应用。",
                 "Screen recording permission not granted. Go to System Settings → Privacy & Security → Screen Recording, enable Moxin Voice, then restart the app.",
             ));
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-                    .translation_log_title
-            ))
-            .set_text(cx, self.tr("运行日志", "Runtime Logs"));
         self.update_translation_settings_layout_for_locale(cx);
         self.update_translation_lang_dropdowns(cx);
         self.update_translation_overlay_style_buttons(cx);
@@ -19217,37 +19147,6 @@ impl TTSScreen {
             );
         }
 
-        // Reset in-page translation log view each run to avoid stale scroll/content
-        // bleeding through the semi-transparent overlay.
-        self.translation_log_lines.clear();
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-                    .translation_log_scroll
-                    .translation_log_label
-            ))
-            .set_text(cx, "");
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-                    .translation_log_scroll
-            ))
-            .set_scroll_pos(cx, dvec2(0.0, 0.0));
-
         self.add_translation_log(
             cx,
             &format!(
@@ -19836,39 +19735,13 @@ impl TTSScreen {
     }
 
     /// Append a line to the translation page log and refresh the label.
-    fn add_translation_log(&mut self, cx: &mut Cx, line: &str) {
-        let ts = {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let hh = (now / 3600) % 24;
-            let mm = (now / 60) % 60;
-            let ss = now % 60;
-            format!("{:02}:{:02}:{:02}", hh, mm, ss)
-        };
-        self.translation_log_lines
-            .push(format!("[{}] {}", ts, line));
-        // Keep at most 200 lines
-        if self.translation_log_lines.len() > 200 {
-            self.translation_log_lines
-                .drain(..self.translation_log_lines.len() - 200);
-        }
-        let text = self.translation_log_lines.join("\n");
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-                    .translation_log_scroll
-                    .translation_log_label
-            ))
-            .set_text(cx, &text);
+    // No-op: the in-page translation log Label was removed because every line
+    // change forced Makepad's text layouter to allocate a new LaidoutText that
+    // its LRU cache could not release (Rcs retained externally), leaking memory
+    // proportional to session length. Call sites are preserved to keep diagnostic
+    // log lines flowing to tracing/stderr without touching the UI.
+    fn add_translation_log(&mut self, _cx: &mut Cx, line: &str) {
+        ::log::info!("[translation] {line}");
     }
 
     /// Update the language dropdown selections after a programmatic change.
@@ -22923,32 +22796,6 @@ impl TTSScreen {
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.setting_row_opacity.opacity_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-                    .translation_log_title
-            ))
-            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
-
         // Apply to global settings modal
         self.view
             .view(ids!(global_settings_modal.settings_dialog))
