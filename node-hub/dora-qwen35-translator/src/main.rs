@@ -258,6 +258,21 @@ fn find_commit_boundary_from_tail(text: &str) -> Option<usize> {
         })
 }
 
+fn should_emit_streaming(
+    new_tail: &str,
+    last_tail: &str,
+    last_emit_at: Option<Instant>,
+    min_interval: Duration,
+) -> bool {
+    if new_tail == last_tail {
+        return false;
+    }
+    match last_emit_at {
+        Some(t) if t.elapsed() < min_interval => false,
+        _ => true,
+    }
+}
+
 fn should_trigger_idle_flush(
     elapsed_since_last_chunk: Option<Duration>,
     has_buffered_text: bool,
@@ -810,6 +825,13 @@ fn main() -> Result<()> {
     let mut next_commit_id: i64 = 1;
     let mut last_commit_tick = Instant::now();
     let mut should_join_worker = true;
+    // Throttle streaming source_text emissions: the UI overlay re-runs the
+    // Makepad text layouter for every new string, and the layouter retains
+    // Rc<LaidoutText> beyond LRU eviction → unbounded heap growth in the UI
+    // process. 500ms + dedup keeps the overlay snappy while bounding churn.
+    const STREAMING_MIN_INTERVAL: Duration = Duration::from_millis(500);
+    let mut last_streaming_at: Option<Instant> = None;
+    let mut last_streaming_text: String = String::new();
 
     loop {
         let mut did_work = false;
@@ -825,8 +847,17 @@ fn main() -> Result<()> {
 
             if did_commit {
                 let tail = transcript.uncommitted_tail();
-                if !tail.is_empty() {
+                if !tail.is_empty()
+                    && should_emit_streaming(
+                        &tail,
+                        &last_streaming_text,
+                        last_streaming_at,
+                        STREAMING_MIN_INTERVAL,
+                    )
+                {
                     let _ = send_source(&mut node, &tail, "streaming", current_burst_id, None);
+                    last_streaming_at = Some(Instant::now());
+                    last_streaming_text = tail;
                 }
             }
 
@@ -930,8 +961,17 @@ fn main() -> Result<()> {
                     );
 
                     let tail = transcript.uncommitted_tail();
-                    if !tail.is_empty() {
+                    if !tail.is_empty()
+                        && should_emit_streaming(
+                            &tail,
+                            &last_streaming_text,
+                            last_streaming_at,
+                            STREAMING_MIN_INTERVAL,
+                        )
+                    {
                         let _ = send_source(&mut node, &tail, "streaming", current_burst_id, None);
+                        last_streaming_at = Some(Instant::now());
+                        last_streaming_text = tail;
                     }
                 }
                 Ok(Event::Stop(_)) => {
