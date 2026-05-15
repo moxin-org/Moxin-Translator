@@ -55,3 +55,6 @@ setup.py
 .venv-moxin/
 .nix-moxin/
 /internal/
+
+# Memory sampling output (analysis artifacts, never committed)
+/scripts/diagnostics/memsample-*.csv
