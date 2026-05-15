@@ -24,6 +24,8 @@ Moxin Voice now includes a built-in **Live Translation** mode for real-time bili
 
 - **Apple Silicon Mac required** — M1 / M2 / M3 / M4
 - **macOS 14.0+ recommended for the full app**
+- **16 GB unified memory recommended for Live Translation**
+  ASR + translator + TTS models combined occupy several GB of resident memory once warmed up; 8 GB Macs will swap heavily during Live Translation. TTS-only use is lighter and fine on 8 GB.
 - **Live Translation system audio input is macOS-only**
 - **System audio capture requires Screen Recording permission**
   On first use, macOS will prompt for Screen Recording access because system audio capture is implemented with ScreenCaptureKit.
@@ -31,6 +33,8 @@ Moxin Voice now includes a built-in **Live Translation** mode for real-time bili
   ScreenCaptureKit requires a display-backed capture session even when you only want audio.
 
 If Screen Recording permission is denied or ScreenCaptureKit is unavailable, Live Translation still works with the microphone input source.
+
+**Memory profile.** Live Translation loads three MLX models (ASR, translator, TTS). Total resident memory grows during model warm-up and then stays bounded; long sessions do not accumulate state.
 
 ---
 
