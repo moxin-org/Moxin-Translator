@@ -12,7 +12,19 @@
 use anyhow::{anyhow, Result};
 use arrow::array::{Array, Float32Array};
 use dora_node_api::{DoraNode, Event, IntoArrow};
-use qwen3_asr_mlx::{default_model_path, Qwen3ASR};
+use qwen3_asr_mlx::{default_model_path, Qwen3ASR, SamplingConfig};
+
+/// Hard cap on generated tokens per transcription.
+///
+/// Upstream default is 8192. A 5–8 s audio segment realistically produces
+/// well under 200 text tokens, so this ceiling exists purely to bound
+/// worst-case memory when the decoder enters a degenerate repetition loop
+/// (the upstream repetition guard only catches single-token loops; multi-token
+/// cycles like `等，等，等，...` run to the cap). With each generated token
+/// pinning ~230 KB of KV-cache, 1024 caps a runaway call at ~240 MB instead
+/// of ~1.9 GB; combined with the post-call `mlx_clear_cache()` below, even
+/// repeated runaway calls cannot accumulate.
+const ASR_MAX_TOKENS: usize = 1024;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -449,9 +461,25 @@ fn main() -> Result<()> {
                     samples
                 };
 
-                // Transcribe
+                // Transcribe with a tighter token cap than the upstream default
+                // and an explicit Metal cache release after each call. Upstream's
+                // `transcribe_samples` builds its own SamplingConfig (max_tokens=8192)
+                // and never returns Metal buffers to the system between calls.
+                let config = SamplingConfig {
+                    temperature: 0.0,
+                    max_tokens: ASR_MAX_TOKENS,
+                };
                 let start = std::time::Instant::now();
-                match model.transcribe_samples(&samples_16k, &language) {
+                let transcribe_result =
+                    model.transcribe_samples_with_config(&samples_16k, &language, &config);
+                // Release Metal buffer pool accumulated by the KV cache during
+                // generation. Equivalent to Python's `mx.metal.clear_cache()`;
+                // mirrors the translator node's hygiene. MUST run on both success
+                // and error paths or memory will leak when transcription fails.
+                unsafe {
+                    mlx_sys::mlx_clear_cache();
+                }
+                match transcribe_result {
                     Ok(text) => {
                         let elapsed = start.elapsed().as_secs_f32();
                         tracing::info!(
