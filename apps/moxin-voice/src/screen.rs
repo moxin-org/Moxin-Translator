@@ -5481,8 +5481,8 @@ live_design! {
                             }
                         }
 
-                        // Body: Settings panel always visible; log card appears below it
-                        // once translation is running.
+                        // Body: Settings panel always visible; a Fill spacer below
+                        // keeps the action button pinned to the bottom.
                         translation_body = <View> {
                             width: Fill, height: Fill
                             flow: Down
@@ -5806,34 +5806,9 @@ live_design! {
                                 }
                             } // End translation_settings_panel
 
-                            // Fill placeholder so the action button stays pinned
-                            // to the bottom. Hosts a thin warming/listening status
-                            // badge that becomes visible while a dataflow is running.
-                            // (Previously this area also showed a runtime-logs panel
-                            // backed by a single Label whose text grew on every dora
-                            // event; that path leaked unbounded memory through
-                            // Makepad's text layouter and has been removed.)
-                            translation_log_area = <View> {
-                                width: Fill, height: Fill
-                                flow: Down
-
-                            translation_log_card = <View> {
-                                width: Fill, height: Fit
-                                flow: Right
-                                align: {y: 0.5}
-                                padding: {left: 4, right: 4, top: 6, bottom: 6}
-                                visible: false
-
-                                translation_overlay_status_badge = <Label> {
-                                    width: Fit, height: Fit
-                                    draw_text: {
-                                        text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                        color: #E59A34
-                                    }
-                                    text: "● WARMING UP"
-                                }
-                            } // End translation_log_card
-                            } // End translation_log_area
+                            // Fill spacer so the action button stays pinned to the
+                            // bottom of the page.
+                            <View> { width: Fill, height: Fill }
 
                             // ── 单按钮：根据状态在 Start ↔ Stop 切换 ─────────
                             translation_action_btn = <Button> {
@@ -8368,10 +8343,6 @@ pub struct TTSScreen {
     /// Overlay anchor position preset percentage: "35" | "50" | "70" | "100"
     #[rust]
     translation_overlay_anchor_position_preset: String,
-    /// Cached overlay status string ("warming" / "listening") to avoid redundant
-    /// label rewrites on each timer tick.
-    #[rust]
-    translation_overlay_status_cached: String,
     /// Audio source for translation: false = microphone, true = system audio
     #[rust]
     /// Whether we have already triggered the background screen-recording permission probe
@@ -8657,7 +8628,6 @@ impl Widget for TTSScreen {
             self.translation_overlay_font_size_preset = "24".to_string();
             self.translation_overlay_footer_font_size_preset = "10".to_string();
             self.translation_overlay_anchor_position_preset = "50".to_string(); // "Center"
-            self.translation_overlay_status_cached = String::new();
             self.translation_permission_probed = false;
             self.translation_permission_timer = Timer::default();
             self.ensure_translation_permission_probe(cx);
@@ -8768,7 +8738,6 @@ impl Widget for TTSScreen {
             self.poll_dora_startup(cx);
             self.poll_dora_events(cx);
             self.poll_translation_dora_events(cx);
-            self.poll_translation_status_badge(cx);
             self.maybe_retry_dataflow_start(cx);
 
             // Two-phase wait after backend switch: first bridges drop, then come back to 4
@@ -19373,7 +19342,6 @@ impl TTSScreen {
             shared.translation_overlay_active.set(true);
             shared.translation_overlay_status.set("warming".to_string());
         }
-        self.translation_overlay_status_cached.clear();
         // Sync audio source from current dropdown selection
         self.send_audio_source_to_bridge(self.translation_device_idx == 0);
 
@@ -19602,21 +19570,8 @@ impl TTSScreen {
             ))
             .set_visible(cx, running);
 
-        // Settings panel stays visible the whole time. Only the log card flips
-        // visibility — when running it appears beneath the settings card.
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_log_area
-                    .translation_log_card
-            ))
-            .set_visible(cx, running);
-
+        // Settings panel stays visible the whole time; nothing else in the body
+        // toggles with the running state now that the runtime-logs area is gone.
         self.update_translation_action_button(cx);
         self.update_translation_locked_controls(cx, running);
 
@@ -19684,54 +19639,6 @@ impl TTSScreen {
         btn.set_text(cx, label);
         let running_flag: f32 = if self.translation_running { 1.0 } else { 0.0 };
         btn.apply_over(cx, live! { draw_bg: { running: (running_flag) } });
-    }
-
-    /// Drain the latest warming/listening status from shared state and refresh
-    /// the runtime-logs badge. The heartbeat itself runs in app.rs (overlay
-    /// shell) which writes the bridge-readiness result into shared state.
-    fn poll_translation_status_badge(&mut self, cx: &mut Cx) {
-        if !self.translation_running {
-            return;
-        }
-        let Some(shared) = self.translation_shared_state() else {
-            return;
-        };
-        let Some(status) = shared.translation_overlay_status.read_if_dirty() else {
-            return;
-        };
-        if self.translation_overlay_status_cached == status {
-            return;
-        }
-        self.translation_overlay_status_cached = status.clone();
-        self.update_translation_status_badge(cx, &status);
-    }
-
-    /// Update the warming/listening status badge on the runtime-logs card.
-    fn update_translation_status_badge(&mut self, cx: &mut Cx, status: &str) {
-        let (text, color) = match status {
-            "listening" => {
-                let t = if self.is_english() { "● LISTENING" } else { "● 监听中" };
-                (t, vec4(0.098, 0.725, 0.506, 1.0))
-            }
-            // "warming" or unknown.
-            _ => {
-                let t = if self.is_english() { "● WARMING UP" } else { "● 预热中" };
-                (t, vec4(0.906, 0.620, 0.204, 1.0))
-            }
-        };
-        let label = self.view.label(ids!(
-            content_wrapper
-                .main_content
-                .left_column
-                .content_area
-                .translation_page
-                .translation_body
-                .translation_log_area
-                .translation_log_card
-                .translation_overlay_status_badge
-        ));
-        label.set_text(cx, text);
-        label.apply_over(cx, live! { draw_text: { color: (color) } });
     }
 
     /// Append a line to the translation page log and refresh the label.
