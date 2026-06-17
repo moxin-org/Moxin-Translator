@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # macos_bootstrap.sh — Qwen3-only, no conda/Python required.
 #
-# Model download is handled by the bundled `moxin-init` Rust binary,
-# which downloads Qwen3 TTS and ASR models directly from HuggingFace
-# via HTTP (with resume support and HF_ENDPOINT mirror support).
+# Model download is handled by the bundled `moxin-init` Rust binary.
+# It defaults to automatic source selection: ModelScope first when reachable,
+# with Hugging Face as a fallback when that path is also reachable.
 #
 # This script is intentionally minimal: locate moxin-init, pass
 # environment variables, and exec it. All progress reporting is done
@@ -52,11 +52,24 @@ echo "ASR model dir: $QWEN_ASR_DIR"
 echo "Qwen3.5 translator dir: $QWEN35_TRANSLATOR_DIR"
 echo ""
 
+MODEL_PROVIDER_VALUE="${MOXIN_MODEL_PROVIDER:-auto}"
+MODELSCOPE_ENDPOINT_VALUE="${MOXIN_MODELSCOPE_ENDPOINT:-}"
 HF_ENDPOINT_VALUE="${HF_ENDPOINT:-}"
+
+echo "Model provider: $MODEL_PROVIDER_VALUE"
+if [[ -n "$MODELSCOPE_ENDPOINT_VALUE" ]]; then
+  echo "ModelScope endpoint: $MODELSCOPE_ENDPOINT_VALUE"
+fi
+if [[ -n "$HF_ENDPOINT_VALUE" ]]; then
+  echo "Hugging Face endpoint: $HF_ENDPOINT_VALUE"
+fi
+echo ""
 
 if [[ -n "$HF_ENDPOINT_VALUE" ]]; then
   exec env \
     MOXIN_BOOTSTRAP_STATE_PATH="$STATE_PATH" \
+    MOXIN_MODEL_PROVIDER="$MODEL_PROVIDER_VALUE" \
+    MOXIN_MODELSCOPE_ENDPOINT="$MODELSCOPE_ENDPOINT_VALUE" \
     QWEN3_TTS_MODEL_ROOT="$QWEN_ROOT" \
     QWEN3_TTS_CUSTOMVOICE_MODEL_DIR="$QWEN_CUSTOM_DIR" \
     QWEN3_TTS_CUSTOMVOICE_REPO="$QWEN_CUSTOM_REPO" \
@@ -71,6 +84,8 @@ if [[ -n "$HF_ENDPOINT_VALUE" ]]; then
 else
   exec env \
     MOXIN_BOOTSTRAP_STATE_PATH="$STATE_PATH" \
+    MOXIN_MODEL_PROVIDER="$MODEL_PROVIDER_VALUE" \
+    MOXIN_MODELSCOPE_ENDPOINT="$MODELSCOPE_ENDPOINT_VALUE" \
     QWEN3_TTS_MODEL_ROOT="$QWEN_ROOT" \
     QWEN3_TTS_CUSTOMVOICE_MODEL_DIR="$QWEN_CUSTOM_DIR" \
     QWEN3_TTS_CUSTOMVOICE_REPO="$QWEN_CUSTOM_REPO" \

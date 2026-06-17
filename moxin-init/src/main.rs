@@ -2,7 +2,8 @@
 //!
 //! First-run model downloader for Moxin Voice.
 //! Replaces the conda/Python bootstrap: downloads Qwen3 TTS and ASR models
-//! directly from HuggingFace via HTTP, with resume support.
+//! directly via HTTP, with ModelScope as the default provider and Hugging Face
+//! available as a fallback.
 //!
 //! ## Configuration (environment variables)
 //!
@@ -20,7 +21,9 @@
 //! | `QWEN3_ASR_REPO`                  | `mlx-community/Qwen3-ASR-1.7B-8bit`                 |
 //! | `QWEN35_TRANSLATOR_MODEL_PATH`    | `~/.OminiX/models/Qwen3.5-2B-MLX-4bit`              |
 //! | `QWEN35_TRANSLATOR_REPO`          | `mlx-community/Qwen3.5-2B-MLX-4bit`                 |
-//! | `HF_ENDPOINT`                     | `https://huggingface.co` (set for mirror support)   |
+//! | `MOXIN_MODEL_PROVIDER`            | `auto` (`modelscope`/`huggingface` force one path)  |
+//! | `MOXIN_MODELSCOPE_ENDPOINT`       | `https://modelscope.cn`                             |
+//! | `HF_ENDPOINT`                     | `https://huggingface.co` (Hugging Face provider)    |
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -38,13 +41,63 @@ use serde::{Deserialize, Serialize};
 // where pct is overall download progress as a float 0.0000–1.0000.
 
 // Actual download sizes in bytes (measured 2026-04-17, `du -sk` × 1024)
-const BYTES_TTS_CUSTOM: u64 = 5_473_562_624;  // Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
-const BYTES_TTS_BASE: u64   = 3_104_284_672;  // Qwen3-TTS-12Hz-1.7B-Base-8bit
-const BYTES_TRANSLATOR: u64 = 1_749_164_032;  // Qwen3.5-2B-MLX-4bit
-const BYTES_ASR: u64        = 2_473_308_160;  // Qwen3-ASR-1.7B-8bit
-const TOTAL_BYTES: u64      = BYTES_TTS_CUSTOM + BYTES_TTS_BASE + BYTES_TRANSLATOR + BYTES_ASR;
+const BYTES_TTS_CUSTOM: u64 = 5_473_562_624; // Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
+const BYTES_TTS_BASE: u64 = 3_104_284_672; // Qwen3-TTS-12Hz-1.7B-Base-8bit
+const BYTES_TRANSLATOR: u64 = 1_749_164_032; // Qwen3.5-2B-MLX-4bit
+const BYTES_ASR: u64 = 2_473_308_160; // Qwen3-ASR-1.7B-8bit
+const TOTAL_BYTES: u64 = BYTES_TTS_CUSTOM + BYTES_TTS_BASE + BYTES_TRANSLATOR + BYTES_ASR;
 const MODEL_COMPLETION_MARKER: &str = ".moxin-model-complete.json";
 const BOOTSTRAP_VERSION: u32 = 1;
+const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
+const DEFAULT_MODELSCOPE_ENDPOINT: &str = "https://modelscope.cn";
+const PROVIDER_PROBE_REPO: &str = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit";
+const PROVIDER_PROBE_FILE: &str = "config.json";
+
+const TTS_MODEL_FILES: &[&str] = &[
+    ".gitattributes",
+    "README.md",
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "speech_tokenizer/config.json",
+    "speech_tokenizer/configuration.json",
+    "speech_tokenizer/model.safetensors",
+    "speech_tokenizer/preprocessor_config.json",
+    "tokenizer_config.json",
+    "vocab.json",
+];
+
+const ASR_MODEL_FILES: &[&str] = &[
+    ".gitattributes",
+    "README.md",
+    "chat_template.json",
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "tokenizer_config.json",
+    "vocab.json",
+];
+
+const QWEN35_TRANSLATOR_MODEL_FILES: &[&str] = &[
+    ".gitattributes",
+    "README.md",
+    "chat_template.jinja",
+    "config.json",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "processor_config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "video_preprocessor_config.json",
+    "vocab.json",
+];
 
 fn write_state(
     state_file: Option<&Path>,
@@ -60,12 +113,22 @@ fn write_state(
     } else {
         0.0
     };
-    eprintln!("[moxin-init] {}/{} {} — {} ({:.1}%)", current, total, title, detail, pct * 100.0);
+    eprintln!(
+        "[moxin-init] {}/{} {} — {} ({:.1}%)",
+        current,
+        total,
+        title,
+        detail,
+        pct * 100.0
+    );
     let Some(path) = state_file else { return };
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let _ = fs::write(path, format!("{}/{}|{}|{}|{:.4}\n", current, total, title, detail, pct));
+    let _ = fs::write(
+        path,
+        format!("{}/{}|{}|{}|{:.4}\n", current, total, title, detail, pct),
+    );
 }
 
 fn file_exists(path: &Path) -> bool {
@@ -139,7 +202,8 @@ fn ensure_model_dir_ready(
             dir.display()
         );
         if dir.exists() {
-            fs::remove_dir_all(dir).with_context(|| format!("remove incomplete model dir {}", dir.display()))?;
+            fs::remove_dir_all(dir)
+                .with_context(|| format!("remove incomplete model dir {}", dir.display()))?;
         }
         return Ok(false);
     }
@@ -149,7 +213,8 @@ fn ensure_model_dir_ready(
             "[moxin-init] model directory without a valid completion marker, removing {}",
             dir.display()
         );
-        fs::remove_dir_all(dir).with_context(|| format!("remove incomplete model dir {}", dir.display()))?;
+        fs::remove_dir_all(dir)
+            .with_context(|| format!("remove incomplete model dir {}", dir.display()))?;
     }
     Ok(false)
 }
@@ -179,7 +244,203 @@ fn qwen35_translation_model_ready(dir: &Path) -> bool {
             || file_exists(&dir.join("model.safetensors.index.json")))
 }
 
-// ── HuggingFace HTTP helpers ──────────────────────────────────────────────────
+// ── Model download providers ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModelProvider {
+    Auto,
+    HuggingFace,
+    ModelScope,
+}
+
+impl ModelProvider {
+    fn from_env_value(value: Option<&str>) -> Result<Self> {
+        let normalized = value.unwrap_or("").trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "" | "auto" => Ok(Self::Auto),
+            "modelscope" | "ms" => Ok(Self::ModelScope),
+            "huggingface" | "hf" => Ok(Self::HuggingFace),
+            other => bail!(
+                "unsupported MOXIN_MODEL_PROVIDER={other:?}; expected auto, modelscope, or huggingface"
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DownloadProvider {
+    kind: ModelProvider,
+    endpoint: String,
+}
+
+impl DownloadProvider {
+    fn providers_from_env() -> Result<Vec<Self>> {
+        let preference =
+            ModelProvider::from_env_value(env::var("MOXIN_MODEL_PROVIDER").ok().as_deref())?;
+        let modelscope = Self::modelscope(endpoint_from_env(
+            "MOXIN_MODELSCOPE_ENDPOINT",
+            DEFAULT_MODELSCOPE_ENDPOINT,
+        ));
+        let huggingface = Self::huggingface(endpoint_from_env("HF_ENDPOINT", DEFAULT_HF_ENDPOINT));
+
+        match preference {
+            ModelProvider::Auto => {
+                let probe_client = reqwest::blocking::Client::builder()
+                    .timeout(Duration::from_secs(2))
+                    .redirect(reqwest::redirect::Policy::limited(10))
+                    .build()
+                    .context("Build provider probe HTTP client")?;
+                let modelscope_probe = probe_provider(&probe_client, &modelscope);
+                let huggingface_probe = probe_provider(&probe_client, &huggingface);
+                if let Err(err) = &modelscope_probe {
+                    eprintln!("[moxin-init] ModelScope probe failed: {err:#}");
+                }
+                if let Err(err) = &huggingface_probe {
+                    eprintln!("[moxin-init] Hugging Face probe failed: {err:#}");
+                }
+                let order =
+                    auto_provider_order(modelscope_probe.is_ok(), huggingface_probe.is_ok())?;
+                Ok(order
+                    .into_iter()
+                    .map(|kind| provider_for_kind(kind, &modelscope, &huggingface))
+                    .collect())
+            }
+            ModelProvider::HuggingFace => Ok(vec![huggingface]),
+            ModelProvider::ModelScope => Ok(vec![modelscope]),
+        }
+    }
+
+    fn huggingface(endpoint: String) -> Self {
+        Self {
+            kind: ModelProvider::HuggingFace,
+            endpoint: normalize_endpoint(&endpoint),
+        }
+    }
+
+    fn modelscope(endpoint: String) -> Self {
+        Self {
+            kind: ModelProvider::ModelScope,
+            endpoint: normalize_endpoint(&endpoint),
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self.kind {
+            ModelProvider::Auto => "auto",
+            ModelProvider::HuggingFace => "huggingface",
+            ModelProvider::ModelScope => "modelscope",
+        }
+    }
+
+    fn repo_file_url(&self, repo_id: &str, filename: &str) -> String {
+        match self.kind {
+            ModelProvider::Auto => unreachable!("auto provider must be resolved before download"),
+            ModelProvider::HuggingFace => {
+                format!("{}/{}/resolve/main/{}", self.endpoint, repo_id, filename)
+            }
+            ModelProvider::ModelScope => {
+                format!(
+                    "{}/models/{}/resolve/master/{}",
+                    self.endpoint, repo_id, filename
+                )
+            }
+        }
+    }
+
+    fn huggingface_repo_info_url(&self, repo_id: &str) -> String {
+        format!("{}/api/models/{}", self.endpoint, repo_id)
+    }
+}
+
+fn provider_for_kind(
+    kind: ModelProvider,
+    modelscope: &DownloadProvider,
+    huggingface: &DownloadProvider,
+) -> DownloadProvider {
+    match kind {
+        ModelProvider::ModelScope => modelscope.clone(),
+        ModelProvider::HuggingFace => huggingface.clone(),
+        ModelProvider::Auto => unreachable!("auto provider must be resolved before download"),
+    }
+}
+
+fn auto_provider_order(
+    modelscope_reachable: bool,
+    huggingface_reachable: bool,
+) -> Result<Vec<ModelProvider>> {
+    match (modelscope_reachable, huggingface_reachable) {
+        (true, true) => Ok(vec![ModelProvider::ModelScope, ModelProvider::HuggingFace]),
+        (true, false) => Ok(vec![ModelProvider::ModelScope]),
+        (false, true) => Ok(vec![ModelProvider::HuggingFace]),
+        (false, false) => bail!("could not reach ModelScope or Hugging Face model endpoints"),
+    }
+}
+
+fn probe_provider(client: &reqwest::blocking::Client, provider: &DownloadProvider) -> Result<()> {
+    let url = provider.repo_file_url(PROVIDER_PROBE_REPO, PROVIDER_PROBE_FILE);
+    let resp = client
+        .head(&url)
+        .send()
+        .with_context(|| format!("HEAD {}", url))?;
+    if resp.status().is_success() {
+        Ok(())
+    } else {
+        bail!("HTTP {} probing {}", resp.status(), provider.name())
+    }
+}
+
+fn run_with_provider_fallback(
+    providers: &[DownloadProvider],
+    operation_name: &str,
+    mut run: impl FnMut(usize, &DownloadProvider) -> Result<()>,
+) -> Result<()> {
+    if providers.is_empty() {
+        bail!("no model download providers configured for {operation_name}");
+    }
+
+    let mut failures = Vec::new();
+    for (attempt, provider) in providers.iter().enumerate() {
+        match run(attempt, provider) {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                eprintln!(
+                    "[moxin-init] {} failed via {}: {:#}",
+                    operation_name,
+                    provider.name(),
+                    err
+                );
+                failures.push(format!("{}: {:#}", provider.name(), err));
+            }
+        }
+    }
+
+    bail!(
+        "{} failed using all reachable providers: {}",
+        operation_name,
+        failures.join(" | ")
+    )
+}
+
+fn endpoint_from_env(name: &str, default: &str) -> String {
+    match env::var(name) {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => default.to_string(),
+    }
+}
+
+fn normalize_endpoint(endpoint: &str) -> String {
+    endpoint.trim().trim_end_matches('/').to_string()
+}
+
+fn modelscope_manifest_files(repo_id: &str) -> Result<&'static [&'static str]> {
+    match repo_id {
+        "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
+        | "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit" => Ok(TTS_MODEL_FILES),
+        "mlx-community/Qwen3-ASR-1.7B-8bit" => Ok(ASR_MODEL_FILES),
+        "mlx-community/Qwen3.5-2B-MLX-4bit" => Ok(QWEN35_TRANSLATOR_MODEL_FILES),
+        _ => bail!("no built-in ModelScope manifest for {}", repo_id),
+    }
+}
 
 #[derive(Deserialize)]
 struct Sibling {
@@ -191,34 +452,41 @@ struct RepoInfo {
     siblings: Vec<Sibling>,
 }
 
-fn hf_base() -> String {
-    match env::var("HF_ENDPOINT") {
-        Ok(v) if !v.trim().is_empty() => v,
-        _ => "https://huggingface.co".to_string(),
+/// Fetch the list of files in a model repo.
+fn list_repo_files(
+    client: &reqwest::blocking::Client,
+    provider: &DownloadProvider,
+    repo_id: &str,
+) -> Result<Vec<String>> {
+    match provider.kind {
+        ModelProvider::Auto => unreachable!("auto provider must be resolved before listing files"),
+        ModelProvider::HuggingFace => {
+            let url = provider.huggingface_repo_info_url(repo_id);
+            let info: RepoInfo = client
+                .get(&url)
+                .send()
+                .with_context(|| format!("GET {}", url))?
+                .error_for_status()
+                .with_context(|| format!("HTTP error listing {}", repo_id))?
+                .json()
+                .context("Parse repo info JSON")?;
+            Ok(info.siblings.into_iter().map(|s| s.rfilename).collect())
+        }
+        ModelProvider::ModelScope => Ok(modelscope_manifest_files(repo_id)?
+            .iter()
+            .map(|filename| (*filename).to_string())
+            .collect()),
     }
 }
 
-/// Fetch the list of files in a HuggingFace model repo.
-fn list_repo_files(client: &reqwest::blocking::Client, repo_id: &str) -> Result<Vec<String>> {
-    let url = format!("{}/api/models/{}", hf_base(), repo_id);
-    let info: RepoInfo = client
-        .get(&url)
-        .send()
-        .with_context(|| format!("GET {}", url))?
-        .error_for_status()
-        .with_context(|| format!("HTTP error listing {}", repo_id))?
-        .json()
-        .context("Parse repo info JSON")?;
-    Ok(info.siblings.into_iter().map(|s| s.rfilename).collect())
-}
-
-/// Download a single file from a HuggingFace repo to `dest`.
+/// Download a single file from a model repo to `dest`.
 ///
 /// Uses `Range` requests for resume: if `dest` already exists and is non-empty,
 /// only the remaining bytes are fetched and appended.
 /// Returns the number of bytes actually written in this call.
 fn download_file(
     client: &reqwest::blocking::Client,
+    provider: &DownloadProvider,
     repo_id: &str,
     filename: &str,
     dest: &Path,
@@ -229,7 +497,7 @@ fn download_file(
     }
 
     let existing_bytes = dest.metadata().map(|m| m.len()).unwrap_or(0);
-    let url = format!("{}/{}/resolve/main/{}", hf_base(), repo_id, filename);
+    let url = provider.repo_file_url(repo_id, filename);
 
     let mut req = client.get(&url);
     if existing_bytes > 0 {
@@ -290,13 +558,14 @@ fn download_file(
     Ok(downloaded)
 }
 
-/// Download all files in a HuggingFace repo to `target_dir`.
+/// Download all files in a model repo to `target_dir`.
 ///
 /// Already-present files are skipped. The `state_file` is updated per-file
 /// so the UI progress bar reflects real download activity.
 /// `bytes_done` is updated after each file; `total_bytes` is used for pct.
 fn download_repo(
     client: &reqwest::blocking::Client,
+    provider: &DownloadProvider,
     repo_id: &str,
     target_dir: &Path,
     state_file: Option<&Path>,
@@ -305,13 +574,16 @@ fn download_repo(
     bytes_done: &mut u64,
     total_bytes: u64,
 ) -> Result<()> {
-    fs::create_dir_all(target_dir)
-        .with_context(|| format!("mkdir {:?}", target_dir))?;
+    fs::create_dir_all(target_dir).with_context(|| format!("mkdir {:?}", target_dir))?;
 
     let short_name = repo_id.split('/').last().unwrap_or(repo_id);
-    eprintln!("[moxin-init] listing files for {}", repo_id);
+    eprintln!(
+        "[moxin-init] listing files for {} via {}",
+        repo_id,
+        provider.name()
+    );
 
-    let files = list_repo_files(client, repo_id)
+    let files = list_repo_files(client, provider, repo_id)
         .with_context(|| format!("list files for {}", repo_id))?;
 
     eprintln!("[moxin-init] {} file(s) in {}", files.len(), repo_id);
@@ -322,7 +594,12 @@ fn download_repo(
             eprintln!("[moxin-init] skip (exists): {}", filename);
             continue;
         }
-        eprintln!("[moxin-init] downloading [{}/{}]: {}", i + 1, files.len(), filename);
+        eprintln!(
+            "[moxin-init] downloading [{}/{}]: {}",
+            i + 1,
+            files.len(),
+            filename
+        );
         write_state(
             state_file,
             step,
@@ -332,27 +609,87 @@ fn download_repo(
             *bytes_done,
             total_bytes,
         );
-        let written = download_file(client, repo_id, filename, &dest, |written_so_far, speed_bps| {
+        let written = download_file(
+            client,
+            provider,
+            repo_id,
+            filename,
+            &dest,
+            |written_so_far, speed_bps| {
+                write_state(
+                    state_file,
+                    step,
+                    total_steps,
+                    &format!("Downloading {}", short_name),
+                    &format!(
+                        "[{}/{}] {} • {}",
+                        i + 1,
+                        files.len(),
+                        filename,
+                        format_bytes_per_second(speed_bps),
+                    ),
+                    *bytes_done + written_so_far,
+                    total_bytes,
+                );
+            },
+        )
+        .with_context(|| format!("download {}/{}", repo_id, filename))?;
+        *bytes_done += written;
+    }
+    Ok(())
+}
+
+fn download_model_with_provider_fallback(
+    client: &reqwest::blocking::Client,
+    providers: &[DownloadProvider],
+    repo_id: &str,
+    target_dir: &Path,
+    state_file: Option<&Path>,
+    step: usize,
+    total_steps: usize,
+    bytes_done: &mut u64,
+    total_bytes: u64,
+    ready_check: impl Fn(&Path) -> bool + Copy,
+    incomplete_message: &str,
+) -> Result<()> {
+    let short_name = repo_id.split('/').last().unwrap_or(repo_id);
+    let bytes_before_model = *bytes_done;
+
+    run_with_provider_fallback(providers, repo_id, |attempt, provider| {
+        if attempt > 0 {
+            *bytes_done = bytes_before_model;
+            if target_dir.exists() {
+                fs::remove_dir_all(target_dir)
+                    .with_context(|| format!("remove failed model dir {}", target_dir.display()))?;
+            }
             write_state(
                 state_file,
                 step,
                 total_steps,
-                &format!("Downloading {}", short_name),
-                &format!(
-                    "[{}/{}] {} • {}",
-                    i + 1,
-                    files.len(),
-                    filename,
-                    format_bytes_per_second(speed_bps),
-                ),
-                *bytes_done + written_so_far,
+                &format!("Retrying {}", short_name),
+                &format!("Switching to {}", provider.name()),
+                *bytes_done,
                 total_bytes,
             );
-        })
-            .with_context(|| format!("download {}/{}", repo_id, filename))?;
-        *bytes_done += written;
-    }
-    Ok(())
+        }
+
+        download_repo(
+            client,
+            provider,
+            repo_id,
+            target_dir,
+            state_file,
+            step,
+            total_steps,
+            bytes_done,
+            total_bytes,
+        )?;
+
+        if !ready_check(target_dir) {
+            bail!("{}: {}", incomplete_message, target_dir.display());
+        }
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -388,6 +725,140 @@ mod tests {
         assert_eq!(format_bytes_per_second(512.0), "512 B/s");
         assert_eq!(format_bytes_per_second(2048.0), "2.0 KB/s");
         assert_eq!(format_bytes_per_second(5.5 * 1024.0 * 1024.0), "5.5 MB/s");
+    }
+
+    #[test]
+    fn model_provider_defaults_to_auto_and_accepts_aliases() {
+        assert_eq!(
+            ModelProvider::from_env_value(None).unwrap(),
+            ModelProvider::Auto
+        );
+        assert_eq!(
+            ModelProvider::from_env_value(Some("  ")).unwrap(),
+            ModelProvider::Auto
+        );
+        assert_eq!(
+            ModelProvider::from_env_value(Some("auto")).unwrap(),
+            ModelProvider::Auto
+        );
+        assert_eq!(
+            ModelProvider::from_env_value(Some("modelscope")).unwrap(),
+            ModelProvider::ModelScope
+        );
+        assert_eq!(
+            ModelProvider::from_env_value(Some("ms")).unwrap(),
+            ModelProvider::ModelScope
+        );
+        assert_eq!(
+            ModelProvider::from_env_value(Some("huggingface")).unwrap(),
+            ModelProvider::HuggingFace
+        );
+        assert_eq!(
+            ModelProvider::from_env_value(Some("hf")).unwrap(),
+            ModelProvider::HuggingFace
+        );
+    }
+
+    #[test]
+    fn model_provider_rejects_unknown_values() {
+        let err = ModelProvider::from_env_value(Some("unknown")).unwrap_err();
+        assert!(err.to_string().contains("MOXIN_MODEL_PROVIDER"));
+    }
+
+    #[test]
+    fn auto_provider_order_prefers_modelscope_with_huggingface_fallback() {
+        assert_eq!(
+            auto_provider_order(true, true).unwrap(),
+            vec![ModelProvider::ModelScope, ModelProvider::HuggingFace]
+        );
+        assert_eq!(
+            auto_provider_order(true, false).unwrap(),
+            vec![ModelProvider::ModelScope]
+        );
+        assert_eq!(
+            auto_provider_order(false, true).unwrap(),
+            vec![ModelProvider::HuggingFace]
+        );
+    }
+
+    #[test]
+    fn auto_provider_order_errors_when_no_provider_is_reachable() {
+        let err = auto_provider_order(false, false).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("could not reach ModelScope or Hugging Face"));
+    }
+
+    #[test]
+    fn download_provider_builds_provider_specific_file_urls() {
+        let hf = DownloadProvider::huggingface("https://hf.example/".to_string());
+        let modelscope = DownloadProvider::modelscope("https://modelscope.example/".to_string());
+
+        assert_eq!(
+            hf.repo_file_url("owner/repo", "nested/file.txt"),
+            "https://hf.example/owner/repo/resolve/main/nested/file.txt"
+        );
+        assert_eq!(
+            modelscope.repo_file_url("owner/repo", "nested/file.txt"),
+            "https://modelscope.example/models/owner/repo/resolve/master/nested/file.txt"
+        );
+    }
+
+    #[test]
+    fn modelscope_manifest_uses_fixed_file_lists() {
+        let asr_files = modelscope_manifest_files("mlx-community/Qwen3-ASR-1.7B-8bit").unwrap();
+        assert_eq!(
+            asr_files,
+            &[
+                ".gitattributes",
+                "README.md",
+                "chat_template.json",
+                "config.json",
+                "generation_config.json",
+                "merges.txt",
+                "model.safetensors",
+                "model.safetensors.index.json",
+                "preprocessor_config.json",
+                "tokenizer_config.json",
+                "vocab.json",
+            ]
+        );
+
+        let tts_files =
+            modelscope_manifest_files("mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")
+                .unwrap();
+        assert!(tts_files.contains(&"speech_tokenizer/model.safetensors"));
+    }
+
+    #[test]
+    fn modelscope_manifest_rejects_unknown_repos() {
+        let err = modelscope_manifest_files("custom/repo").unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("no built-in ModelScope manifest for custom/repo"));
+    }
+
+    #[test]
+    fn provider_fallback_retries_next_provider_after_error() {
+        let providers = vec![
+            DownloadProvider::modelscope("https://modelscope.example/".to_string()),
+            DownloadProvider::huggingface("https://hf.example/".to_string()),
+        ];
+        let mut attempts = Vec::new();
+
+        run_with_provider_fallback(&providers, "test operation", |_, provider| {
+            attempts.push(provider.kind);
+            if provider.kind == ModelProvider::ModelScope {
+                bail!("modelscope failed");
+            }
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(
+            attempts,
+            vec![ModelProvider::ModelScope, ModelProvider::HuggingFace]
+        );
     }
 
     #[test]
@@ -453,7 +924,9 @@ fn resolve_config() -> Config {
         .unwrap_or_else(|_| home.join(".OminiX/models/qwen3-tts-mlx"));
 
     Config {
-        state_file: env::var("MOXIN_BOOTSTRAP_STATE_PATH").ok().map(PathBuf::from),
+        state_file: env::var("MOXIN_BOOTSTRAP_STATE_PATH")
+            .ok()
+            .map(PathBuf::from),
         tts_custom_dir: env::var("QWEN3_TTS_CUSTOMVOICE_MODEL_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| qwen_root.join("Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")),
@@ -482,11 +955,20 @@ fn resolve_config() -> Config {
 fn main() -> Result<()> {
     let cfg = resolve_config();
     let state_file = cfg.state_file.as_deref();
+    let providers = DownloadProvider::providers_from_env()?;
+    let provider_names = providers
+        .iter()
+        .map(|provider| provider.name())
+        .collect::<Vec<_>>()
+        .join(" -> ");
+    eprintln!("[moxin-init] model provider order: {}", provider_names);
 
     // 4 potential downloads: CustomVoice TTS, Base TTS, Qwen3.5 translator, ASR
     let total: usize = 4;
-    let custom_ready = ensure_model_dir_ready(&cfg.tts_custom_dir, &cfg.tts_custom_repo, tts_model_ready)?;
-    let base_ready = ensure_model_dir_ready(&cfg.tts_base_dir, &cfg.tts_base_repo, tts_model_ready)?;
+    let custom_ready =
+        ensure_model_dir_ready(&cfg.tts_custom_dir, &cfg.tts_custom_repo, tts_model_ready)?;
+    let base_ready =
+        ensure_model_dir_ready(&cfg.tts_base_dir, &cfg.tts_base_repo, tts_model_ready)?;
     let translator_ready = ensure_model_dir_ready(
         &cfg.qwen35_translator_dir,
         &cfg.qwen35_translator_repo,
@@ -527,11 +1009,28 @@ fn main() -> Result<()> {
     // ── Step 1: TTS CustomVoice ───────────────────────────────────────────────
     if custom_ready {
         eprintln!("[moxin-init] TTS CustomVoice already ready, skipping");
-        write_state(state_file, 1, total, "TTS CustomVoice", "Already present", bytes_done, TOTAL_BYTES);
+        write_state(
+            state_file,
+            1,
+            total,
+            "TTS CustomVoice",
+            "Already present",
+            bytes_done,
+            TOTAL_BYTES,
+        );
     } else {
-        write_state(state_file, 1, total, "Downloading TTS CustomVoice", "Starting...", bytes_done, TOTAL_BYTES);
-        download_repo(
+        write_state(
+            state_file,
+            1,
+            total,
+            "Downloading TTS CustomVoice",
+            "Starting...",
+            bytes_done,
+            TOTAL_BYTES,
+        );
+        download_model_with_provider_fallback(
             &client,
+            &providers,
             &cfg.tts_custom_repo,
             &cfg.tts_custom_dir,
             state_file,
@@ -539,13 +1038,9 @@ fn main() -> Result<()> {
             total,
             &mut bytes_done,
             TOTAL_BYTES,
+            tts_model_ready,
+            "TTS CustomVoice model incomplete after download",
         )?;
-        if !tts_model_ready(&cfg.tts_custom_dir) {
-            bail!(
-                "TTS CustomVoice model incomplete after download: {}",
-                cfg.tts_custom_dir.display()
-            );
-        }
         write_model_completion_marker(&cfg.tts_custom_dir, &cfg.tts_custom_repo)?;
         eprintln!("[moxin-init] TTS CustomVoice download complete");
     }
@@ -553,11 +1048,28 @@ fn main() -> Result<()> {
     // ── Step 2: TTS Base ──────────────────────────────────────────────────────
     if base_ready {
         eprintln!("[moxin-init] TTS Base already ready, skipping");
-        write_state(state_file, 2, total, "TTS Base", "Already present", bytes_done, TOTAL_BYTES);
+        write_state(
+            state_file,
+            2,
+            total,
+            "TTS Base",
+            "Already present",
+            bytes_done,
+            TOTAL_BYTES,
+        );
     } else {
-        write_state(state_file, 2, total, "Downloading TTS Base", "Starting...", bytes_done, TOTAL_BYTES);
-        download_repo(
+        write_state(
+            state_file,
+            2,
+            total,
+            "Downloading TTS Base",
+            "Starting...",
+            bytes_done,
+            TOTAL_BYTES,
+        );
+        download_model_with_provider_fallback(
             &client,
+            &providers,
             &cfg.tts_base_repo,
             &cfg.tts_base_dir,
             state_file,
@@ -565,13 +1077,9 @@ fn main() -> Result<()> {
             total,
             &mut bytes_done,
             TOTAL_BYTES,
+            tts_model_ready,
+            "TTS Base model incomplete after download",
         )?;
-        if !tts_model_ready(&cfg.tts_base_dir) {
-            bail!(
-                "TTS Base model incomplete after download: {}",
-                cfg.tts_base_dir.display()
-            );
-        }
         write_model_completion_marker(&cfg.tts_base_dir, &cfg.tts_base_repo)?;
         eprintln!("[moxin-init] TTS Base download complete");
     }
@@ -579,11 +1087,28 @@ fn main() -> Result<()> {
     // ── Step 3: Qwen3.5 translator (required) ─────────────────────────────────
     if translator_ready {
         eprintln!("[moxin-init] Qwen3.5 translator model already ready, skipping");
-        write_state(state_file, 3, total, "Qwen3.5 Translator", "Already present", bytes_done, TOTAL_BYTES);
+        write_state(
+            state_file,
+            3,
+            total,
+            "Qwen3.5 Translator",
+            "Already present",
+            bytes_done,
+            TOTAL_BYTES,
+        );
     } else {
-        write_state(state_file, 3, total, "Downloading Qwen3.5 Translator", "Starting...", bytes_done, TOTAL_BYTES);
-        download_repo(
+        write_state(
+            state_file,
+            3,
+            total,
+            "Downloading Qwen3.5 Translator",
+            "Starting...",
+            bytes_done,
+            TOTAL_BYTES,
+        );
+        download_model_with_provider_fallback(
             &client,
+            &providers,
             &cfg.qwen35_translator_repo,
             &cfg.qwen35_translator_dir,
             state_file,
@@ -591,14 +1116,10 @@ fn main() -> Result<()> {
             total,
             &mut bytes_done,
             TOTAL_BYTES,
+            qwen35_translation_model_ready,
+            "Qwen3.5 translator model incomplete after download",
         )
         .with_context(|| "Qwen3.5 translator download failed")?;
-        if !qwen35_translation_model_ready(&cfg.qwen35_translator_dir) {
-            bail!(
-                "Qwen3.5 translator model incomplete after download: {}",
-                cfg.qwen35_translator_dir.display()
-            );
-        }
         write_model_completion_marker(&cfg.qwen35_translator_dir, &cfg.qwen35_translator_repo)?;
         eprintln!("[moxin-init] Qwen3.5 translator download complete");
     }
@@ -606,11 +1127,28 @@ fn main() -> Result<()> {
     // ── Step 4: ASR (required) ─────────────────────────────────────────────────
     if asr_ready {
         eprintln!("[moxin-init] ASR model already ready, skipping");
-        write_state(state_file, 4, total, "ASR Model", "Already present", bytes_done, TOTAL_BYTES);
+        write_state(
+            state_file,
+            4,
+            total,
+            "ASR Model",
+            "Already present",
+            bytes_done,
+            TOTAL_BYTES,
+        );
     } else {
-        write_state(state_file, 4, total, "Downloading ASR Model", "Starting...", bytes_done, TOTAL_BYTES);
-        download_repo(
+        write_state(
+            state_file,
+            4,
+            total,
+            "Downloading ASR Model",
+            "Starting...",
+            bytes_done,
+            TOTAL_BYTES,
+        );
+        download_model_with_provider_fallback(
             &client,
+            &providers,
             &cfg.asr_repo,
             &cfg.asr_dir,
             state_file,
@@ -618,19 +1156,23 @@ fn main() -> Result<()> {
             total,
             &mut bytes_done,
             TOTAL_BYTES,
+            asr_model_ready,
+            "ASR model incomplete after download",
         )
         .with_context(|| "ASR model download failed")?;
-        if !asr_model_ready(&cfg.asr_dir) {
-            bail!(
-                "ASR model incomplete after download: {}",
-                cfg.asr_dir.display()
-            );
-        }
         write_model_completion_marker(&cfg.asr_dir, &cfg.asr_repo)?;
         eprintln!("[moxin-init] ASR download complete");
     }
 
-    write_state(state_file, total, total, "Done", "All models ready", TOTAL_BYTES, TOTAL_BYTES);
+    write_state(
+        state_file,
+        total,
+        total,
+        "Done",
+        "All models ready",
+        TOTAL_BYTES,
+        TOTAL_BYTES,
+    );
     println!("[moxin-init] initialization complete");
     Ok(())
 }
