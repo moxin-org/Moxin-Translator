@@ -18519,32 +18519,10 @@ impl TTSScreen {
     }
 
     fn runtime_init_progress_for_display(&self) -> f64 {
-        let pct = self.runtime_init_progress.clamp(0.0, 1.0);
-        if pct > 0.0 {
-            return pct;
-        }
-
-        let status = self.runtime_init_status_text.trim();
-        let Some(open) = status.rfind('(') else {
-            return 0.0;
-        };
-        let Some(close) = status[open + 1..].find(')') else {
-            return 0.0;
-        };
-        let fraction = &status[open + 1..open + 1 + close];
-        let Some((current, total)) = fraction.split_once('/') else {
-            return 0.0;
-        };
-        let Ok(current) = current.trim().parse::<f64>() else {
-            return 0.0;
-        };
-        let Ok(total) = total.trim().parse::<f64>() else {
-            return 0.0;
-        };
-        if total <= 0.0 {
-            return 0.0;
-        }
-        (current / total).clamp(0.0, 1.0)
+        runtime_init_progress_for_display_value(
+            self.runtime_init_progress,
+            &self.runtime_init_status_text,
+        )
     }
 
     fn update_loading_overlay_runtime_status(&mut self, cx: &mut Cx) {
@@ -25929,9 +25907,14 @@ impl TTSScreenRef {
     }
 }
 
+fn runtime_init_progress_for_display_value(progress: f64, _status: &str) -> f64 {
+    progress.clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
+        runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
         AppPage, DownloadFormat, RuntimeInitState, TTSScreen,
     };
@@ -25962,6 +25945,12 @@ mod tests {
             RuntimeInitState::Ready,
             true
         ));
+    }
+
+    #[test]
+    fn runtime_init_progress_display_does_not_infer_model_fraction() {
+        let pct = runtime_init_progress_for_display_value(0.0, "Initializing runtime (1/4)");
+        assert_eq!(pct, 0.0);
     }
 
     #[test]
