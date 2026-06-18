@@ -28,6 +28,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const MOXIN_VOICE_BUNDLE_ID: &str = "com.moxin.voice";
+const BOOTSTRAP_LOCK_FILE: &str = "bootstrap.lock";
 
 /// Current page in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -103,6 +104,40 @@ fn should_probe_translation_permission_on_page_entry(
     current_page == AppPage::Translation && !translation_permission_probed
 }
 
+fn parse_bootstrap_lock_pid(contents: &str) -> Option<u32> {
+    contents.lines().find_map(|line| {
+        let line = line.trim();
+        let pid = line.strip_prefix("pid=").unwrap_or(line);
+        pid.parse::<u32>().ok().filter(|pid| *pid > 0)
+    })
+}
+
+fn process_id_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    if pid == std::process::id() {
+        return true;
+    }
+    Command::new("/bin/kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn bootstrap_lock_is_active(path: &Path) -> bool {
+    let Ok(contents) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    parse_bootstrap_lock_pid(&contents)
+        .map(process_id_is_running)
+        .unwrap_or(false)
+}
+
 #[derive(Debug)]
 enum RuntimeInitEvent {
     Stage {
@@ -112,6 +147,47 @@ enum RuntimeInitEvent {
     },
     DoneOk,
     DoneErr(String),
+}
+
+fn send_bootstrap_state_update(
+    bootstrap_state: &Path,
+    last_state: &mut String,
+    tx: &mpsc::Sender<RuntimeInitEvent>,
+) {
+    let Ok(state_content) = std::fs::read_to_string(bootstrap_state) else {
+        return;
+    };
+    let state = state_content.trim().to_string();
+    if state.is_empty() || state == *last_state {
+        return;
+    }
+
+    *last_state = state.clone();
+    let Some((progress, rest)) = state.split_once('|') else {
+        return;
+    };
+    let mut parts = rest.splitn(3, '|');
+    let title = parts.next().unwrap_or("").trim();
+    let detail_and_pct = parts.next().unwrap_or("");
+    let (detail, pct) = if let Some(p) = parts.next() {
+        (
+            detail_and_pct.trim(),
+            p.trim().parse::<f64>().unwrap_or(0.0),
+        )
+    } else {
+        (detail_and_pct.trim(), 0.0)
+    };
+    let _ = tx.send(RuntimeInitEvent::Stage {
+        status: format!("Initializing runtime ({})", progress.trim()),
+        detail: if title.is_empty() && detail.is_empty() {
+            "Working...".to_string()
+        } else if detail.is_empty() {
+            title.to_string()
+        } else {
+            format!("{} - {}", title, detail)
+        },
+        progress: pct,
+    });
 }
 
 #[derive(Debug)]
@@ -18316,7 +18392,11 @@ impl TTSScreen {
         let _ = std::fs::create_dir_all(&log_dir);
         let bootstrap_log = log_dir.join("bootstrap.log");
         let bootstrap_state = log_dir.join("bootstrap_state.txt");
-        let _ = std::fs::remove_file(&bootstrap_state);
+        let bootstrap_lock = log_dir.join(BOOTSTRAP_LOCK_FILE);
+        let attach_existing_bootstrap = bootstrap_lock_is_active(&bootstrap_lock);
+        if !attach_existing_bootstrap {
+            let _ = std::fs::remove_file(&bootstrap_state);
+        }
 
         self.runtime_init_state = RuntimeInitState::Running;
         self.runtime_init_status_text = self.tr("初始化中...", "Initializing...").to_string();
@@ -18326,13 +18406,21 @@ impl TTSScreen {
         self.runtime_init_progress = 0.0;
         self.runtime_init_download_ui_active = false;
 
-        self.add_log(cx, "[INFO] [startup] Checking runtime dependencies...");
+        if attach_existing_bootstrap {
+            self.add_log(
+                cx,
+                "[INFO] [startup] Resuming existing runtime initialization...",
+            );
+        } else {
+            self.add_log(cx, "[INFO] [startup] Checking runtime dependencies...");
+        }
 
         let (tx, rx) = mpsc::channel::<RuntimeInitEvent>();
         self.runtime_init_rx = Some(rx);
         let inference_backend = self.app_preferences.inference_backend.clone();
         let zero_shot_backend = self.app_preferences.zero_shot_backend.clone();
         let app_resources_env = app_resources.clone();
+        let bootstrap_lock_for_thread = bootstrap_lock.clone();
 
         thread::spawn(move || {
             let _ = tx.send(RuntimeInitEvent::Stage {
@@ -18351,6 +18439,42 @@ impl TTSScreen {
                 .unwrap_or(false);
             if pre_ok {
                 let _ = tx.send(RuntimeInitEvent::DoneOk);
+                return;
+            }
+
+            if attach_existing_bootstrap {
+                let _ = tx.send(RuntimeInitEvent::Stage {
+                    status: "Initializing runtime".to_string(),
+                    detail: "Resuming existing model download".to_string(),
+                    progress: 0.0,
+                });
+
+                let mut last_state = String::new();
+                loop {
+                    send_bootstrap_state_update(&bootstrap_state, &mut last_state, &tx);
+                    if !bootstrap_lock_is_active(&bootstrap_lock_for_thread) {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                }
+                send_bootstrap_state_update(&bootstrap_state, &mut last_state, &tx);
+
+                let pre_ok = Command::new(&pre)
+                    .env("MOXIN_APP_RESOURCES", &app_resources_env)
+                    .env("MOXIN_INFERENCE_BACKEND", &inference_backend)
+                    .env("MOXIN_ZERO_SHOT_BACKEND", &zero_shot_backend)
+                    .arg("--quick")
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                if pre_ok {
+                    let _ = tx.send(RuntimeInitEvent::DoneOk);
+                } else {
+                    let _ = tx.send(RuntimeInitEvent::DoneErr(format!(
+                        "Initialization failed. Check: {}",
+                        bootstrap_log.display()
+                    )));
+                }
                 return;
             }
 
@@ -18409,37 +18533,7 @@ impl TTSScreen {
 
             let mut last_state = String::new();
             let boot_ok = loop {
-                if let Ok(state_content) = std::fs::read_to_string(&bootstrap_state) {
-                    let state = state_content.trim().to_string();
-                    if !state.is_empty() && state != last_state {
-                        last_state = state.clone();
-                        if let Some((progress, rest)) = state.split_once('|') {
-                            let mut parts = rest.splitn(3, '|');
-                            let title = parts.next().unwrap_or("").trim();
-                            let detail_and_pct = parts.next().unwrap_or("");
-                            // 4th field is optional pct float
-                            let (detail, pct) = if let Some(p) = parts.next() {
-                                (
-                                    detail_and_pct.trim(),
-                                    p.trim().parse::<f64>().unwrap_or(0.0),
-                                )
-                            } else {
-                                (detail_and_pct.trim(), 0.0)
-                            };
-                            let _ = tx.send(RuntimeInitEvent::Stage {
-                                status: format!("Initializing runtime ({})", progress.trim()),
-                                detail: if title.is_empty() && detail.is_empty() {
-                                    "Working...".to_string()
-                                } else if detail.is_empty() {
-                                    title.to_string()
-                                } else {
-                                    format!("{} - {}", title, detail)
-                                },
-                                progress: pct,
-                            });
-                        }
-                    }
-                }
+                send_bootstrap_state_update(&bootstrap_state, &mut last_state, &tx);
 
                 match child.try_wait() {
                     Ok(Some(status)) => break status.success(),
@@ -18480,7 +18574,8 @@ impl TTSScreen {
                         // Apply every Stage immediately so progress is never dropped.
                         self.runtime_init_status_text = status;
                         self.runtime_init_detail_text = detail;
-                        self.runtime_init_progress = progress;
+                        self.runtime_init_progress =
+                            runtime_init_next_display_progress(self.runtime_init_progress, progress);
                         self.runtime_init_download_ui_active = true;
                     }
                     done => {
@@ -25911,10 +26006,14 @@ fn runtime_init_progress_for_display_value(progress: f64, _status: &str) -> f64 
     progress.clamp(0.0, 1.0)
 }
 
+fn runtime_init_next_display_progress(current: f64, incoming: f64) -> f64 {
+    current.clamp(0.0, 1.0).max(incoming.clamp(0.0, 1.0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        runtime_init_progress_for_display_value,
+        runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
         AppPage, DownloadFormat, RuntimeInitState, TTSScreen,
     };
@@ -25951,6 +26050,12 @@ mod tests {
     fn runtime_init_progress_display_does_not_infer_model_fraction() {
         let pct = runtime_init_progress_for_display_value(0.0, "Initializing runtime (1/4)");
         assert_eq!(pct, 0.0);
+    }
+
+    #[test]
+    fn runtime_init_progress_display_never_moves_backward() {
+        let pct = runtime_init_next_display_progress(0.037, 0.0288);
+        assert_eq!(pct, 0.037);
     }
 
     #[test]

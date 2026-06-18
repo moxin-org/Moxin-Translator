@@ -29,6 +29,7 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
@@ -53,6 +54,8 @@ const DEFAULT_MODELSCOPE_ENDPOINT: &str = "https://modelscope.cn";
 const HTTP_USER_AGENT: &str = "MoxinVoice/moxin-init";
 const PROVIDER_PROBE_REPO: &str = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit";
 const PROVIDER_PROBE_FILE: &str = "config.json";
+const BOOTSTRAP_LOCK_FILE: &str = "bootstrap.lock";
+const MAX_DOWNLOAD_FILE_ATTEMPTS: usize = 4;
 
 const TTS_MODEL_FILES: &[&str] = &[
     ".gitattributes",
@@ -136,6 +139,10 @@ fn file_exists(path: &Path) -> bool {
     path.metadata().map(|m| m.is_file()).unwrap_or(false)
 }
 
+fn file_len(path: &Path) -> u64 {
+    path.metadata().map(|m| m.len()).unwrap_or(0)
+}
+
 fn format_bytes_per_second(bytes_per_sec: f64) -> String {
     if bytes_per_sec >= 1024.0 * 1024.0 * 1024.0 {
         format!("{:.1} GB/s", bytes_per_sec / (1024.0 * 1024.0 * 1024.0))
@@ -146,6 +153,87 @@ fn format_bytes_per_second(bytes_per_sec: f64) -> String {
     } else {
         format!("{:.0} B/s", bytes_per_sec)
     }
+}
+
+#[derive(Debug)]
+struct BootstrapLock {
+    path: PathBuf,
+    _file: File,
+}
+
+impl Drop for BootstrapLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn parse_bootstrap_lock_pid(contents: &str) -> Option<u32> {
+    contents.lines().find_map(|line| {
+        let line = line.trim();
+        let pid = line.strip_prefix("pid=").unwrap_or(line);
+        pid.parse::<u32>().ok().filter(|pid| *pid > 0)
+    })
+}
+
+fn process_id_is_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    if pid == std::process::id() {
+        return true;
+    }
+    Command::new("/bin/kill")
+        .arg("-0")
+        .arg(pid.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn bootstrap_lock_is_active(path: &Path) -> bool {
+    let Ok(contents) = fs::read_to_string(path) else {
+        return false;
+    };
+    parse_bootstrap_lock_pid(&contents)
+        .map(process_id_is_running)
+        .unwrap_or(false)
+}
+
+fn acquire_bootstrap_lock(path: &Path) -> Result<BootstrapLock> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("mkdir {}", parent.display()))?;
+    }
+
+    for _ in 0..2 {
+        match OpenOptions::new().write(true).create_new(true).open(path) {
+            Ok(mut file) => {
+                write!(file, "pid={}\n", std::process::id())
+                    .with_context(|| format!("write bootstrap lock {}", path.display()))?;
+                return Ok(BootstrapLock {
+                    path: path.to_path_buf(),
+                    _file: file,
+                });
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                if bootstrap_lock_is_active(path) {
+                    bail!(
+                        "another moxin-init bootstrap is already running; lock: {}",
+                        path.display()
+                    );
+                }
+                fs::remove_file(path)
+                    .with_context(|| format!("remove stale bootstrap lock {}", path.display()))?;
+            }
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("create bootstrap lock {}", path.display()));
+            }
+        }
+    }
+
+    bail!("could not acquire bootstrap lock {}", path.display())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -564,6 +652,67 @@ fn download_file(
     Ok(downloaded)
 }
 
+fn should_retry_download_error(err: &anyhow::Error) -> bool {
+    let msg = format!("{err:#}").to_lowercase();
+    if msg.contains("http 4") {
+        return false;
+    }
+    [
+        "body",
+        "connection",
+        "end of file",
+        "timed out",
+        "timeout",
+        "request",
+    ]
+    .iter()
+    .any(|needle| msg.contains(needle))
+}
+
+fn download_file_with_retries(
+    client: &reqwest::blocking::Client,
+    provider: &DownloadProvider,
+    repo_id: &str,
+    filename: &str,
+    dest: &Path,
+    mut on_progress: impl FnMut(u64, f64),
+) -> Result<u64> {
+    let initial_len = file_len(dest);
+
+    for attempt in 1..=MAX_DOWNLOAD_FILE_ATTEMPTS {
+        let attempt_base = file_len(dest).saturating_sub(initial_len);
+        match download_file(
+            client,
+            provider,
+            repo_id,
+            filename,
+            dest,
+            |written_so_far, speed_bps| {
+                on_progress(attempt_base + written_so_far, speed_bps);
+            },
+        ) {
+            Ok(_) => return Ok(file_len(dest).saturating_sub(initial_len)),
+            Err(err)
+                if attempt < MAX_DOWNLOAD_FILE_ATTEMPTS && should_retry_download_error(&err) =>
+            {
+                eprintln!(
+                    "[moxin-init] retrying {}/{} via {} after transient download error (attempt {}/{}): {:#}",
+                    repo_id,
+                    filename,
+                    provider.name(),
+                    attempt + 1,
+                    MAX_DOWNLOAD_FILE_ATTEMPTS,
+                    err
+                );
+                std::thread::sleep(Duration::from_secs(attempt as u64));
+            }
+            Err(err) => return Err(err),
+        }
+    }
+
+    bail!("download retry loop exhausted for {}/{}", repo_id, filename)
+}
+
 /// Download all files in a model repo to `target_dir`.
 ///
 /// Already-present files are skipped. The `state_file` is updated per-file
@@ -615,7 +764,7 @@ fn download_repo(
             *bytes_done,
             total_bytes,
         );
-        let written = download_file(
+        let written = download_file_with_retries(
             client,
             provider,
             repo_id,
@@ -887,6 +1036,97 @@ mod tests {
     }
 
     #[test]
+    fn download_file_retries_short_body_with_range_resume() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let (mut first, _) = listener.accept().unwrap();
+            let mut first_reader = BufReader::new(first.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                first_reader.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+            }
+            first
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nabc")
+                .unwrap();
+
+            let (mut second, _) = listener.accept().unwrap();
+            let mut second_reader = BufReader::new(second.try_clone().unwrap());
+            let mut headers = Vec::new();
+            loop {
+                let mut line = String::new();
+                second_reader.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                headers.push(line);
+            }
+            tx.send(headers.join("")).unwrap();
+            second
+                .write_all(
+                    b"HTTP/1.1 206 Partial Content\r\nContent-Length: 7\r\nContent-Range: bytes 3-9/10\r\n\r\ndefghij",
+                )
+                .unwrap();
+        });
+
+        let dir = unique_temp_dir("range-resume");
+        let dest = dir.join("file.bin");
+        let provider = DownloadProvider::modelscope(format!("http://{addr}"));
+        let client = build_http_client(Duration::from_secs(2)).unwrap();
+        let written = download_file_with_retries(
+            &client,
+            &provider,
+            "owner/repo",
+            "file.bin",
+            &dest,
+            |_, _| {},
+        )
+        .unwrap();
+
+        assert_eq!(written, 10);
+        assert_eq!(fs::read(&dest).unwrap(), b"abcdefghij");
+        let second_headers = rx.recv().unwrap();
+        assert!(
+            second_headers.contains("Range: bytes=3-"),
+            "second request did not resume from byte 3:\n{second_headers}"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn bootstrap_lock_blocks_active_second_instance() {
+        let dir = unique_temp_dir("active-lock");
+        let lock_path = dir.join("bootstrap.lock");
+        let lock = acquire_bootstrap_lock(&lock_path).unwrap();
+
+        let err = acquire_bootstrap_lock(&lock_path).unwrap_err();
+        assert!(err.to_string().contains("already running"));
+
+        drop(lock);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn bootstrap_lock_replaces_stale_pid() {
+        let dir = unique_temp_dir("stale-lock");
+        let lock_path = dir.join("bootstrap.lock");
+        fs::write(&lock_path, "pid=999999\n").unwrap();
+
+        let lock = acquire_bootstrap_lock(&lock_path).unwrap();
+        assert!(lock_path.exists());
+        drop(lock);
+        assert!(!lock_path.exists());
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn provider_fallback_retries_next_provider_after_error() {
         let providers = vec![
             DownloadProvider::modelscope("https://modelscope.example/".to_string()),
@@ -965,6 +1205,18 @@ struct Config {
     qwen35_translator_repo: String,
 }
 
+fn bootstrap_lock_path(cfg: &Config) -> PathBuf {
+    cfg.state_file
+        .as_ref()
+        .and_then(|path| path.parent().map(|parent| parent.join(BOOTSTRAP_LOCK_FILE)))
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("Library/Logs/MoxinVoice")
+                .join(BOOTSTRAP_LOCK_FILE)
+        })
+}
+
 fn resolve_config() -> Config {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     let qwen_root = env::var("QWEN3_TTS_MODEL_ROOT")
@@ -1002,6 +1254,8 @@ fn resolve_config() -> Config {
 
 fn main() -> Result<()> {
     let cfg = resolve_config();
+    let lock_path = bootstrap_lock_path(&cfg);
+    let _bootstrap_lock = acquire_bootstrap_lock(&lock_path)?;
     let state_file = cfg.state_file.as_deref();
     let providers = DownloadProvider::providers_from_env()?;
     let provider_names = providers
