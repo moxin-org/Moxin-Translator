@@ -50,6 +50,7 @@ const MODEL_COMPLETION_MARKER: &str = ".moxin-model-complete.json";
 const BOOTSTRAP_VERSION: u32 = 1;
 const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
 const DEFAULT_MODELSCOPE_ENDPOINT: &str = "https://modelscope.cn";
+const HTTP_USER_AGENT: &str = "MoxinVoice/moxin-init";
 const PROVIDER_PROBE_REPO: &str = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit";
 const PROVIDER_PROBE_FILE: &str = "config.json";
 
@@ -285,11 +286,7 @@ impl DownloadProvider {
 
         match preference {
             ModelProvider::Auto => {
-                let probe_client = reqwest::blocking::Client::builder()
-                    .timeout(Duration::from_secs(2))
-                    .redirect(reqwest::redirect::Policy::limited(10))
-                    .build()
-                    .context("Build provider probe HTTP client")?;
+                let probe_client = build_http_client(Duration::from_secs(5))?;
                 let modelscope_probe = probe_provider(&probe_client, &modelscope);
                 let huggingface_probe = probe_provider(&probe_client, &huggingface);
                 if let Err(err) = &modelscope_probe {
@@ -426,6 +423,15 @@ fn endpoint_from_env(name: &str, default: &str) -> String {
         Ok(v) if !v.trim().is_empty() => v,
         _ => default.to_string(),
     }
+}
+
+fn build_http_client(timeout: Duration) -> Result<reqwest::blocking::Client> {
+    reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .user_agent(HTTP_USER_AGENT)
+        .build()
+        .context("Build HTTP client")
 }
 
 fn normalize_endpoint(endpoint: &str) -> String {
@@ -695,6 +701,9 @@ fn download_model_with_provider_fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{BufRead, BufReader};
+    use std::net::TcpListener;
+    use std::sync::mpsc;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn unique_temp_dir(name: &str) -> PathBuf {
@@ -836,6 +845,45 @@ mod tests {
         assert!(err
             .to_string()
             .contains("no built-in ModelScope manifest for custom/repo"));
+    }
+
+    #[test]
+    fn http_client_sends_moxin_user_agent() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut headers = Vec::new();
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" || line.is_empty() {
+                    break;
+                }
+                headers.push(line);
+            }
+            tx.send(headers).unwrap();
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .unwrap();
+        });
+
+        let client = build_http_client(Duration::from_secs(1)).unwrap();
+        client
+            .get(format!("http://{addr}/probe"))
+            .send()
+            .unwrap()
+            .error_for_status()
+            .unwrap();
+
+        let headers = rx.recv().unwrap().join("");
+        assert!(
+            headers.contains("User-Agent: MoxinVoice/moxin-init"),
+            "request headers did not contain the expected User-Agent:\n{headers}"
+        );
     }
 
     #[test]
@@ -1000,11 +1048,7 @@ fn main() -> Result<()> {
         TOTAL_BYTES,
     );
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(3600))
-        .redirect(reqwest::redirect::Policy::limited(10))
-        .build()
-        .context("Build HTTP client")?;
+    let client = build_http_client(Duration::from_secs(3600))?;
 
     // ── Step 1: TTS CustomVoice ───────────────────────────────────────────────
     if custom_ready {
