@@ -20964,8 +20964,25 @@ impl TTSScreen {
             }
         }
 
-        let format =
+        let preferred_format =
             Self::download_format_from_preference(&self.app_preferences.tts_download_format);
+        let format = Self::download_format_for_availability(
+            &self.app_preferences.tts_download_format,
+            preferred_format != DownloadFormat::Mp3 || Self::resolve_ffmpeg_binary().is_some(),
+        );
+        if preferred_format == DownloadFormat::Mp3 && format == DownloadFormat::Wav {
+            self.add_log(
+                cx,
+                "[WARN] [download] MP3 export unavailable because ffmpeg was not found; falling back to WAV",
+            );
+            self.show_toast(
+                cx,
+                self.tr(
+                    "未找到 ffmpeg，已改为下载 WAV",
+                    "ffmpeg not found; downloading WAV instead",
+                ),
+            );
+        }
         self.pending_download_source = Some(source);
         self.download_audio_to_format(cx, format);
     }
@@ -21216,6 +21233,13 @@ impl TTSScreen {
         match value {
             "wav" => DownloadFormat::Wav,
             _ => DownloadFormat::Mp3,
+        }
+    }
+
+    fn download_format_for_availability(value: &str, mp3_available: bool) -> DownloadFormat {
+        match Self::download_format_from_preference(value) {
+            DownloadFormat::Mp3 if !mp3_available => DownloadFormat::Wav,
+            format => format,
         }
     }
 
@@ -26091,6 +26115,22 @@ mod tests {
         assert_eq!(
             TTSScreen::download_format_from_preference("flac"),
             DownloadFormat::Mp3
+        );
+    }
+
+    #[test]
+    fn tts_download_falls_back_to_wav_when_mp3_encoder_is_unavailable() {
+        assert_eq!(
+            TTSScreen::download_format_for_availability("mp3", false),
+            DownloadFormat::Wav
+        );
+        assert_eq!(
+            TTSScreen::download_format_for_availability("mp3", true),
+            DownloadFormat::Mp3
+        );
+        assert_eq!(
+            TTSScreen::download_format_for_availability("wav", false),
+            DownloadFormat::Wav
         );
     }
 }
