@@ -69,6 +69,7 @@ fn main() -> Result<()> {
         let opts = SynthesizeOptions {
             speaker: spec.id,
             language: spec.language,
+            instruct: None,
             temperature: None,
             top_k: None,
             top_p: None,

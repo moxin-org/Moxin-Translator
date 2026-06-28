@@ -22,7 +22,10 @@ use tracing::info;
 
 use config::{GenerationConfig, Qwen3TtsConfig, SpeechTokenizerConfig};
 use error::{Error, Result};
-use generate::{build_codec_prefix, build_codec_prefix_voice_design, generate, generate_voice_clone, generate_voice_clone_icl, generate_voice_design, GenerationState};
+use generate::{
+    build_codec_prefix, build_codec_prefix_voice_design, generate_custom_voice,
+    generate_voice_clone, generate_voice_clone_icl, generate_voice_design, GenerationState,
+};
 use speech_tokenizer::SpeechTokenizerDecoder;
 use talker::Talker;
 
@@ -55,6 +58,7 @@ pub struct Synthesizer {
 pub struct SynthesizeOptions<'a> {
     pub speaker: &'a str,
     pub language: &'a str,
+    pub instruct: Option<&'a str>,
     pub temperature: Option<f32>,
     pub top_k: Option<i32>,
     pub top_p: Option<f32>,
@@ -69,6 +73,7 @@ impl Default for SynthesizeOptions<'_> {
         Self {
             speaker: "vivian",
             language: "english",
+            instruct: None,
             temperature: None,
             top_k: None,
             top_p: None,
@@ -77,6 +82,23 @@ impl Default for SynthesizeOptions<'_> {
             speed_factor: None,
         }
     }
+}
+
+/// Build the assistant ChatML text used by the official Qwen3-TTS Python wrapper.
+pub fn build_assistant_text(text: &str) -> String {
+    format!(
+        "<|im_start|>assistant\n{}<|im_end|>\n<|im_start|>assistant\n",
+        text
+    )
+}
+
+/// Build the user ChatML instruction used by the official Qwen3-TTS Python wrapper.
+pub fn build_instruct_text(instruct: &str) -> String {
+    format!("<|im_start|>user\n{}<|im_end|>\n", instruct)
+}
+
+fn instruct_if_present(instruct: Option<&str>) -> Option<&str> {
+    instruct.filter(|value| !value.is_empty())
 }
 
 /// Timing breakdown for synthesis.
@@ -114,7 +136,12 @@ impl Synthesizer {
         } else {
             info!("Loading talker model (float)...");
         }
-        let talker = talker::load_talker(model_dir, &tts_config.talker_config, quant.as_ref(), tts_config.tts_pad_token_id)?;
+        let talker = talker::load_talker(
+            model_dir,
+            &tts_config.talker_config,
+            quant.as_ref(),
+            tts_config.tts_pad_token_id,
+        )?;
 
         info!("Loading speech tokenizer decoder...");
         let decoder =
@@ -165,7 +192,9 @@ impl Synthesizer {
                         }
                     }
                 } else {
-                    tracing::info!("No encoder.* weights in speech_tokenizer — ICL mode unavailable");
+                    tracing::info!(
+                        "No encoder.* weights in speech_tokenizer — ICL mode unavailable"
+                    );
                     None
                 }
             } else {
@@ -217,7 +246,10 @@ impl Synthesizer {
         let speaker_embedding = spk_encoder.forward(&mel)?;
         mlx_rs::transforms::eval(std::iter::once(&speaker_embedding))?;
 
-        info!("Speaker embedding computed: {:?}", speaker_embedding.shape());
+        info!(
+            "Speaker embedding computed: {:?}",
+            speaker_embedding.shape()
+        );
 
         if let Some(key) = cache_key {
             if self.speaker_embedding_cache.len() >= 64 {
@@ -253,11 +285,7 @@ impl Synthesizer {
 
     /// Synthesize speech from text.
     /// Returns audio samples as f32 in [-1, 1] at 24kHz.
-    pub fn synthesize(
-        &mut self,
-        text: &str,
-        opts: &SynthesizeOptions,
-    ) -> Result<Vec<f32>> {
+    pub fn synthesize(&mut self, text: &str, opts: &SynthesizeOptions) -> Result<Vec<f32>> {
         let (samples, _timing) = self.synthesize_with_timing(text, opts)?;
         Ok(samples)
     }
@@ -289,23 +317,40 @@ impl Synthesizer {
             gen_config.speed_factor = s;
         }
 
-        // Tokenize text
+        // Official CustomVoice wrapper tokenizes assistant ChatML and passes
+        // optional user ChatML as a separate instruct input.
+        let assistant_text = build_assistant_text(text);
         let encoding = self
             .tokenizer
-            .encode(text, false)
+            .encode(assistant_text.as_str(), false)
             .map_err(|e| Error::Model(format!("Tokenizer error: {e}")))?;
-        let text_token_ids: Vec<u32> = encoding.get_ids().to_vec();
+        let assistant_input_ids: Vec<u32> = encoding.get_ids().to_vec();
 
-        info!("Text tokenized: {} tokens", text_token_ids.len());
+        let instruct_token_ids = instruct_if_present(opts.instruct)
+            .map(|instruct| {
+                let instruct_text = build_instruct_text(instruct);
+                self.tokenizer
+                    .encode(instruct_text.as_str(), false)
+                    .map(|encoding| encoding.get_ids().to_vec())
+                    .map_err(|e| Error::Model(format!("Tokenizer error (instruct): {e}")))
+            })
+            .transpose()?;
+
+        info!(
+            "CustomVoice tokenized: {} assistant tokens, {} instruct tokens",
+            assistant_input_ids.len(),
+            instruct_token_ids.as_ref().map_or(0, Vec::len)
+        );
 
         // Build codec prefix
         let codec_prefix =
             build_codec_prefix(&self.tts_config.talker_config, opts.language, opts.speaker)?;
 
         // Generate codec frames
-        let (codes, gen_timing) = generate(
+        let (codes, gen_timing) = generate_custom_voice(
             &mut self.talker,
-            &text_token_ids,
+            &assistant_input_ids,
+            instruct_token_ids.as_deref().unwrap_or(&[]),
             &codec_prefix,
             &gen_config,
             &self.tts_config,
@@ -362,7 +407,8 @@ impl Synthesizer {
         language: &str,
         opts: &SynthesizeOptions,
     ) -> Result<Vec<f32>> {
-        let (samples, _timing) = self.synthesize_voice_design_with_timing(text, instruct, language, opts)?;
+        let (samples, _timing) =
+            self.synthesize_voice_design_with_timing(text, instruct, language, opts)?;
         Ok(samples)
     }
 
@@ -478,7 +524,8 @@ impl Synthesizer {
         language: &str,
         opts: &SynthesizeOptions,
     ) -> Result<Vec<f32>> {
-        let (samples, _timing) = self.synthesize_voice_clone_with_timing(text, reference_audio, language, opts)?;
+        let (samples, _timing) =
+            self.synthesize_voice_clone_with_timing(text, reference_audio, language, opts)?;
         Ok(samples)
     }
 
@@ -574,10 +621,8 @@ impl Synthesizer {
             self.get_or_compute_speaker_embedding(reference_audio, speaker_cache_key)?;
 
         // Build codec prefix for voice clone (think + explicit language)
-        let codec_prefix = generate::build_codec_prefix_voice_design(
-            &self.tts_config.talker_config,
-            language,
-        )?;
+        let codec_prefix =
+            generate::build_codec_prefix_voice_design(&self.tts_config.talker_config, language)?;
 
         // Generate codec frames
         let (codes, gen_timing) = generate_voice_clone(
@@ -642,7 +687,11 @@ impl Synthesizer {
         opts: &SynthesizeOptions,
     ) -> Result<Vec<f32>> {
         let (samples, _timing) = self.synthesize_voice_clone_icl_with_timing(
-            text, reference_audio, reference_text, language, opts,
+            text,
+            reference_audio,
+            reference_text,
+            language,
+            opts,
         )?;
         Ok(samples)
     }
@@ -727,14 +776,13 @@ impl Synthesizer {
         let speaker_embedding =
             self.get_or_compute_speaker_embedding(reference_audio, speaker_cache_key)?;
 
-        info!(
-            "Speaker embedding: {:?}",
-            speaker_embedding.shape()
-        );
+        info!("Speaker embedding: {:?}", speaker_embedding.shape());
 
         // Encode reference audio to codec frames via Mimi
         let spch_encoder = self.speech_encoder.as_mut().ok_or_else(|| {
-            Error::Model("ICL voice cloning requires a Base model with speech encoder (Mimi)".into())
+            Error::Model(
+                "ICL voice cloning requires a Base model with speech encoder (Mimi)".into(),
+            )
         })?;
         let ref_codes = spch_encoder.encode(reference_audio)?;
         info!("Reference audio encoded: {} frames", ref_codes.len());
@@ -772,16 +820,16 @@ impl Synthesizer {
 
         info!(
             "ICL text tokens: target={:?} ({}), ref={:?} ({})",
-            text_token_ids, text_token_ids.len(),
-            ref_text_ids, ref_text_ids.len(),
+            text_token_ids,
+            text_token_ids.len(),
+            ref_text_ids,
+            ref_text_ids.len(),
         );
 
         // Build codec prefix for ICL: think + explicit language
         // TrevorS's working implementation uses CODEC_THINK with explicit language
-        let codec_prefix = generate::build_codec_prefix_voice_design(
-            &self.tts_config.talker_config,
-            language,
-        )?;
+        let codec_prefix =
+            generate::build_codec_prefix_voice_design(&self.tts_config.talker_config, language)?;
 
         // Generate codec frames
         let (gen_codes, ref_code_frames, _ref_text_len, gen_timing) = generate_voice_clone_icl(
@@ -926,7 +974,11 @@ impl Synthesizer {
             .map_err(|e| Error::Model(format!("Tokenizer error: {e}")))?;
         let text_token_ids: Vec<u32> = encoding.get_ids().to_vec();
 
-        info!("Streaming: {} text tokens, chunk_frames={}", text_token_ids.len(), chunk_frames);
+        info!(
+            "Streaming: {} text tokens, chunk_frames={}",
+            text_token_ids.len(),
+            chunk_frames
+        );
 
         let codec_prefix =
             build_codec_prefix(&self.tts_config.talker_config, opts.language, opts.speaker)?;
@@ -997,10 +1049,133 @@ impl StreamingSession<'_> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn assistant_text_matches_official_qwen_wrapper() {
+        assert_eq!(
+            build_assistant_text("你好"),
+            "<|im_start|>assistant\n你好<|im_end|>\n<|im_start|>assistant\n"
+        );
+    }
+
+    #[test]
+    fn instruct_text_matches_official_qwen_wrapper() {
+        assert_eq!(
+            build_instruct_text("用特别愤怒的语气说"),
+            "<|im_start|>user\n用特别愤怒的语气说<|im_end|>\n"
+        );
+    }
+
+    #[test]
+    fn instruct_presence_matches_official_wrapper() {
+        assert_eq!(instruct_if_present(None), None);
+        assert_eq!(instruct_if_present(Some("")), None);
+        assert_eq!(instruct_if_present(Some("  ")), Some("  "));
+        assert_eq!(instruct_if_present(Some(" angry ")), Some(" angry "));
+    }
+
+    #[test]
+    fn tokenizer_registers_qwen_added_special_tokens() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let model_dir =
+            std::env::temp_dir().join(format!("qwen3-tts-tokenizer-test-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&model_dir).unwrap();
+        fs::write(
+            model_dir.join("vocab.json"),
+            r#"{"<":0,"|":1,"i":2,"m":3,"_":4,"s":5,"t":6,"a":7,"r":8,">":9}"#,
+        )
+        .unwrap();
+        fs::write(model_dir.join("merges.txt"), "#version: 0.2\n").unwrap();
+        fs::write(
+            model_dir.join("tokenizer_config.json"),
+            r#"{
+                "added_tokens_decoder": {
+                    "10": {
+                        "content": "<|im_start|>",
+                        "lstrip": false,
+                        "normalized": false,
+                        "rstrip": false,
+                        "single_word": false,
+                        "special": true
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let tokenizer = load_bpe_tokenizer(&model_dir).unwrap();
+        let encoding = tokenizer.encode("<|im_start|>", false).unwrap();
+
+        fs::remove_dir_all(&model_dir).unwrap();
+        assert_eq!(encoding.get_ids(), &[10]);
+    }
+
+    #[test]
+    fn tokenizer_uses_qwen_byte_level_regex() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let model_dir =
+            std::env::temp_dir().join(format!("qwen3-tts-regex-test-{}-{unique}", std::process::id()));
+        fs::create_dir_all(&model_dir).unwrap();
+        fs::write(
+            model_dir.join("vocab.json"),
+            r#"{"a":0,"Ġ":1,"ĠĠ":2,"Ġa":3}"#,
+        )
+        .unwrap();
+        fs::write(
+            model_dir.join("merges.txt"),
+            "#version: 0.2\nĠ Ġ\nĠ a\n",
+        )
+        .unwrap();
+
+        let tokenizer = load_bpe_tokenizer(&model_dir).unwrap();
+        let encoding = tokenizer.encode("a  a", false).unwrap();
+
+        fs::remove_dir_all(&model_dir).unwrap();
+        assert_eq!(encoding.get_ids(), &[0, 1, 3]);
+    }
+
+}
+
 /// Load a BPE tokenizer from vocab.json + merges.txt (Qwen2 format).
 fn load_bpe_tokenizer(model_dir: &Path) -> Result<tokenizers::Tokenizer> {
     use tokenizers::models::bpe::BPE;
-    use tokenizers::Tokenizer;
+    use tokenizers::{AddedToken, Tokenizer};
+
+    #[derive(serde::Deserialize)]
+    struct TokenizerConfig {
+        #[serde(default)]
+        added_tokens_decoder: std::collections::BTreeMap<u32, AddedTokenConfig>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct AddedTokenConfig {
+        content: String,
+        #[serde(default)]
+        single_word: bool,
+        #[serde(default)]
+        lstrip: bool,
+        #[serde(default)]
+        rstrip: bool,
+        #[serde(default = "default_added_token_normalized")]
+        normalized: bool,
+        #[serde(default)]
+        special: bool,
+    }
+
+    fn default_added_token_normalized() -> bool {
+        true
+    }
 
     let vocab_path = model_dir.join("vocab.json");
     let merges_path = model_dir.join("merges.txt");
@@ -1011,18 +1186,48 @@ fn load_bpe_tokenizer(model_dir: &Path) -> Result<tokenizers::Tokenizer> {
         ));
     }
 
-    let bpe = BPE::from_file(
-        vocab_path.to_str().unwrap(),
-        merges_path.to_str().unwrap(),
-    )
-    .build()
-    .map_err(|e| Error::Model(format!("BPE build error: {e}")))?;
+    let bpe = BPE::from_file(vocab_path.to_str().unwrap(), merges_path.to_str().unwrap())
+        .build()
+        .map_err(|e| Error::Model(format!("BPE build error: {e}")))?;
 
     let mut tokenizer = Tokenizer::new(bpe);
 
+    let tokenizer_config_path = model_dir.join("tokenizer_config.json");
+    if tokenizer_config_path.exists() {
+        let file = std::fs::File::open(&tokenizer_config_path)?;
+        let config: TokenizerConfig = serde_json::from_reader(file)?;
+        let declared_tokens: Vec<(u32, AddedToken)> = config
+            .added_tokens_decoder
+            .into_iter()
+            .map(|(id, token)| {
+                let added = AddedToken::from(token.content, token.special)
+                    .single_word(token.single_word)
+                    .lstrip(token.lstrip)
+                    .rstrip(token.rstrip)
+                    .normalized(token.normalized);
+                (id, added)
+            })
+            .collect();
+        let added_tokens: Vec<AddedToken> = declared_tokens
+            .iter()
+            .map(|(_, token)| token.clone())
+            .collect();
+        tokenizer.add_tokens(&added_tokens);
+
+        for (declared_id, token) in declared_tokens {
+            let actual_id = tokenizer.token_to_id(&token.content);
+            if actual_id != Some(declared_id) {
+                return Err(Error::Config(format!(
+                    "Tokenizer added token '{}' expected id {}, got {:?}",
+                    token.content, declared_id, actual_id
+                )));
+            }
+        }
+    }
+
     // Add byte-level pre-tokenizer (matches Qwen2 tokenizer)
     use tokenizers::pre_tokenizers::byte_level::ByteLevel;
-    tokenizer.with_pre_tokenizer(Some(ByteLevel::new(false, true, false)));
+    tokenizer.with_pre_tokenizer(Some(ByteLevel::new(false, true, true)));
 
     // Add byte-level decoder
     use tokenizers::decoders::byte_level::ByteLevel as ByteLevelDecoder;

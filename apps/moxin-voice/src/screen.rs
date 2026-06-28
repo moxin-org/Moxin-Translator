@@ -12,9 +12,10 @@ use crate::i18n;
 use crate::log_bridge;
 use crate::task_persistence;
 use crate::training_executor::TrainingExecutor;
+use crate::tts_emotion::{self, TtsInstructSelection, TtsInstructState, NEUTRAL_EMOTION_ID};
 use crate::tts_history::{self, TtsHistoryEntry};
 use crate::voice_clone_modal::{CloneMode, VoiceCloneModalAction, VoiceCloneModalWidgetExt};
-use crate::voice_data::{LanguageFilter, TTSStatus, Voice, VoiceFilter};
+use crate::voice_data::{LanguageFilter, TTSStatus, Voice, VoiceFilter, VoiceSource};
 use crate::voice_selector::{VoiceSelectorAction, VoiceSelectorWidgetExt};
 use hound::WavReader;
 use makepad_widgets::*;
@@ -1865,6 +1866,171 @@ live_design! {
                                         text_style: <FONT_SEMIBOLD>{ font_size: 12.0 }
                                         fn get_color(self) -> vec4 {
                                             return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                        }
+                                    }
+                                }
+                            }
+
+                            emotion_row = <View> {
+                                width: Fill, height: Fit
+                                flow: Right
+                                align: {y: 0.5}
+                                spacing: 8
+
+                                emotion_label = <Label> {
+                                    width: Fit, height: Fit
+                                    draw_text: {
+                                        instance dark_mode: 0.0
+                                        text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                        fn get_color(self) -> vec4 {
+                                            return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                        }
+                                    }
+                                    text: "Emotion"
+                                }
+
+                                emotion_options = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right
+                                    align: {y: 0.5}
+                                    spacing: 4
+
+                                    emotion_neutral_btn = <VoiceFilterChip> { text: "自然" }
+                                    emotion_happy_btn = <VoiceFilterChip> { text: "开心" }
+                                    emotion_angry_btn = <VoiceFilterChip> { text: "愤怒" }
+                                    emotion_sad_btn = <VoiceFilterChip> { text: "难过" }
+                                    emotion_gentle_btn = <VoiceFilterChip> { text: "温柔" }
+                                    emotion_excited_btn = <VoiceFilterChip> { text: "兴奋" }
+                                    emotion_custom_status = <VoiceFilterChip> {
+                                        visible: false
+                                        text: "自定义"
+                                    }
+                                }
+                            }
+
+                            instruct_section = <View> {
+                                width: Fill, height: Fit
+                                flow: Down
+                                spacing: 6
+
+                                instruct_summary_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right
+                                    align: {y: 0.5}
+                                    spacing: 8
+
+                                    instruct_summary = <Label> {
+                                        width: Fill, height: Fit
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 11.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        text: ""
+                                    }
+
+                                    edit_instruct_btn = <Button> {
+                                        width: Fit, height: 26
+                                        padding: {left: 8, right: 8}
+                                        text: "编辑指令"
+                                        draw_bg: {
+                                            instance dark_mode: 0.0
+                                            instance hover: 0.0
+                                            instance border_radius: 6.0
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                let base = mix((SLATE_50), (SLATE_800), self.dark_mode);
+                                                let hover = mix((SLATE_100), (SLATE_700), self.dark_mode);
+                                                sdf.fill(mix(base, hover, self.hover));
+                                                sdf.stroke(mix((SLATE_200), (SLATE_600), self.dark_mode), 1.0);
+                                                return sdf.result;
+                                            }
+                                        }
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                instruct_editor = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+                                    spacing: 6
+                                    visible: false
+
+                                    instruct_input = <TextInput> {
+                                        width: Fill, height: 72
+                                        padding: {left: 10, right: 10, top: 8, bottom: 8}
+                                        empty_text: "输入希望音色采用的语气、情绪或表达方式"
+                                        draw_bg: {
+                                            instance dark_mode: 0.0
+                                            instance border_radius: 6.0
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                sdf.fill(mix((WHITE), (SLATE_800), self.dark_mode));
+                                                sdf.stroke(mix((SLATE_200), (SLATE_600), self.dark_mode), 1.0);
+                                                return sdf.result;
+                                            }
+                                        }
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 12.0, line_spacing: 1.4 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                    }
+
+                                    instruct_editor_footer = <View> {
+                                        width: Fill, height: Fit
+                                        flow: Right
+                                        align: {x: 1.0, y: 0.5}
+                                        spacing: 8
+
+                                        instruct_char_count = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                instance over_limit: 0.0
+                                                text_style: { font_size: 10.0 }
+                                                fn get_color(self) -> vec4 {
+                                                    let normal = mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                                    return mix(normal, (RED_500), self.over_limit);
+                                                }
+                                            }
+                                            text: ""
+                                        }
+
+                                        collapse_instruct_btn = <Button> {
+                                            width: Fit, height: 24
+                                            padding: {left: 8, right: 8}
+                                            text: "收起"
+                                            draw_bg: {
+                                                instance dark_mode: 0.0
+                                                instance hover: 0.0
+                                                instance border_radius: 6.0
+                                                fn pixel(self) -> vec4 {
+                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                    sdf.fill(mix(vec4(0., 0., 0., 0.), vec4(0., 0., 0., 0.), self.dark_mode));
+                                                    return sdf.result;
+                                                }
+                                            }
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
+                                                fn get_color(self) -> vec4 {
+                                                    return mix((PRIMARY_600), (PRIMARY_300), self.dark_mode);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -8197,6 +8363,12 @@ pub struct TTSScreen {
     #[rust]
     pending_generation_volume: f64,
     #[rust]
+    pending_generation_emotion_id: Option<String>,
+    #[rust]
+    pending_generation_emotion_label: Option<String>,
+    #[rust]
+    pending_generation_instruct: Option<String>,
+    #[rust]
     has_generated_audio: bool,
 
     // Preview player for reference audio
@@ -8335,6 +8507,8 @@ pub struct TTSScreen {
     tts_pitch: f64,
     #[rust]
     tts_volume: f64,
+    #[rust]
+    tts_instruct_state: TtsInstructState,
     #[rust]
     tts_slider_dragging: Option<TtsParamSliderKind>,
 
@@ -8515,6 +8689,9 @@ impl Widget for TTSScreen {
             self.pending_generation_speed = 1.0;
             self.pending_generation_pitch = 0.0;
             self.pending_generation_volume = 100.0;
+            self.pending_generation_emotion_id = None;
+            self.pending_generation_emotion_label = None;
+            self.pending_generation_instruct = None;
             self.has_generated_audio = false;
             // Initialize current page — Live Translation is the primary feature
             self.current_page = AppPage::Translation;
@@ -8558,9 +8735,11 @@ impl Widget for TTSScreen {
             self.tts_speed = 1.0;
             self.tts_pitch = 0.0;
             self.tts_volume = 100.0;
+            self.tts_instruct_state = TtsInstructState::default();
             self.tts_slider_dragging = None;
             self.controls_panel_tab = 1;
             self.apply_controls_panel_tab_visibility(cx);
+            self.update_tts_emotion_controls(cx);
             self.update_settings_tabs(cx);
             self.update_sidebar_nav_states(cx);
 
@@ -9879,6 +10058,91 @@ impl Widget for TTSScreen {
                 .view(ids!(model_picker_modal))
                 .set_visible(cx, false);
             self.view.redraw(cx);
+        }
+
+        let selected_emotion = if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_neutral_btn
+            ))
+            .clicked(&actions)
+        {
+            Some("neutral")
+        } else if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_happy_btn
+            ))
+            .clicked(&actions)
+        {
+            Some("happy")
+        } else if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_angry_btn
+            ))
+            .clicked(&actions)
+        {
+            Some("angry")
+        } else if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_sad_btn
+            ))
+            .clicked(&actions)
+        {
+            Some("sad")
+        } else if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_gentle_btn
+            ))
+            .clicked(&actions)
+        {
+            Some("gentle")
+        } else if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_excited_btn
+            ))
+            .clicked(&actions)
+        {
+            Some("excited")
+        } else {
+            None
+        };
+        if let Some(emotion_id) = selected_emotion {
+            self.select_tts_emotion(cx, emotion_id);
+        }
+        if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.edit_instruct_btn
+            ))
+            .clicked(&actions)
+        {
+            self.tts_instruct_state.toggle_editor();
+            self.update_tts_instruct_controls(cx);
+        }
+        if self
+            .view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
+            ))
+            .clicked(&actions)
+        {
+            self.tts_instruct_state.collapse();
+            self.update_tts_instruct_controls(cx);
+        }
+        if let Some(changed_text) = self
+            .view
+            .text_input(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_input
+            ))
+            .changed(&actions)
+        {
+            self.tts_instruct_state.edit(changed_text);
+            self.update_tts_emotion_controls(cx);
         }
 
         // Handle TTS parameter sliders (drag + click-to-jump)
@@ -14406,6 +14670,7 @@ impl TTSScreen {
                     .model_label
             ))
             .set_text(cx, self.tr("模型", "Model"));
+        self.update_tts_emotion_controls(cx);
         self.view
             .label(ids!(
                 content_wrapper
@@ -16824,6 +17089,9 @@ impl TTSScreen {
         self.pending_generation_speed = self.tts_speed;
         self.pending_generation_pitch = self.tts_pitch;
         self.pending_generation_volume = self.tts_volume;
+        self.pending_generation_emotion_id = None;
+        self.pending_generation_emotion_label = None;
+        self.pending_generation_instruct = None;
     }
 
     fn update_audio_player_visibility(&mut self, cx: &mut Cx) {
@@ -17256,6 +17524,9 @@ impl TTSScreen {
             speed: self.pending_generation_speed,
             pitch: self.pending_generation_pitch,
             volume: self.pending_generation_volume,
+            emotion_id: self.pending_generation_emotion_id.clone(),
+            emotion_label: self.pending_generation_emotion_label.clone(),
+            instruct: self.pending_generation_instruct.clone(),
             audio_file,
         };
 
@@ -17490,6 +17761,14 @@ impl TTSScreen {
         self.tts_speed = entry.speed;
         self.tts_pitch = entry.pitch;
         self.tts_volume = entry.volume;
+        self.tts_instruct_state = TtsInstructState::from_history(entry.instruct.as_deref());
+        self.tts_instruct_state.collapse();
+        self.view
+            .text_input(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_input
+            ))
+            .set_text(cx, self.tts_instruct_state.text());
+        self.update_tts_emotion_controls(cx);
         self.update_tts_param_controls(cx);
 
         self.show_toast(
@@ -20537,6 +20816,21 @@ impl TTSScreen {
             self.set_generate_button_loading(cx, false);
             return;
         }
+        if tts_emotion::instruct_is_over_limit_for_request(
+            &self.tts_instruct_state,
+            &self.app_preferences.inference_backend,
+            self.selected_voice_is_builtin(),
+        ) {
+            self.show_toast(
+                cx,
+                self.tr(
+                    "情绪指令超过 200 字符限制，请缩短后重试",
+                    "Emotion instruction exceeds the 200 character limit",
+                ),
+            );
+            self.set_generate_button_loading(cx, false);
+            return;
+        }
 
         let log_text = match text.char_indices().nth(50) {
             Some((idx, _)) => format!("{}...", &text[..idx]),
@@ -20597,6 +20891,51 @@ impl TTSScreen {
         self.pending_generation_speed = self.tts_speed;
         self.pending_generation_pitch = self.tts_pitch;
         self.pending_generation_volume = self.tts_volume;
+        let is_builtin_voice = voice_info
+            .as_ref()
+            .map(|voice| voice.source == VoiceSource::Builtin)
+            .unwrap_or(false);
+        let final_instruct = tts_emotion::instruct_for_request(
+            &self.tts_instruct_state,
+            &self.app_preferences.inference_backend,
+            is_builtin_voice,
+        )
+        .map(str::to_string);
+        let request_selection = tts_emotion::selection_for_request(
+            &self.tts_instruct_state,
+            &self.app_preferences.inference_backend,
+            is_builtin_voice,
+        );
+        let emotion_id = match request_selection {
+            TtsInstructSelection::Neutral => NEUTRAL_EMOTION_ID,
+            TtsInstructSelection::Preset(id) => id,
+            TtsInstructSelection::Custom => tts_emotion::CUSTOM_EMOTION_ID,
+        };
+        let emotion_label = match request_selection {
+            TtsInstructSelection::Neutral => tts_emotion::emotion_preset_or_neutral(
+                NEUTRAL_EMOTION_ID,
+            )
+            .label(self.is_english())
+            .to_string(),
+            TtsInstructSelection::Preset(id) => tts_emotion::emotion_preset_or_neutral(id)
+                .label(self.is_english())
+                .to_string(),
+            TtsInstructSelection::Custom => self.tr("自定义", "Custom").to_string(),
+        };
+        self.pending_generation_emotion_id = Some(emotion_id.to_string());
+        self.pending_generation_emotion_label = Some(emotion_label.clone());
+        self.pending_generation_instruct = final_instruct.clone();
+        if let Some(instruct) = final_instruct.as_deref() {
+            self.add_log(
+                cx,
+                &format!(
+                    "[INFO] [tts] Native instruct enabled: emotion={} ({}), chars={}",
+                    emotion_id,
+                    emotion_label,
+                    instruct.chars().count()
+                ),
+            );
+        }
         self.add_log(cx, "========== VOICE DEBUG START ==========");
 
         // Debug: log voice source
@@ -20759,16 +21098,21 @@ impl TTSScreen {
             "speed": self.pending_generation_speed,
             "pitch": self.pending_generation_pitch,
             "volume": self.pending_generation_volume,
+            "emotion": self.pending_generation_emotion_id.clone(),
+            "instruct": self.pending_generation_instruct.clone(),
         });
         let payload_text = payload.to_string();
 
         self.add_log(
             cx,
             &format!(
-                "[DEBUG] [tts] Params snapshot: speed={:.2}, pitch={:+.1}, volume={:.0}%",
+                "[DEBUG] [tts] Params snapshot: speed={:.2}, pitch={:+.1}, volume={:.0}%, emotion={}",
                 self.pending_generation_speed,
                 self.pending_generation_pitch,
-                self.pending_generation_volume
+                self.pending_generation_volume,
+                self.pending_generation_emotion_id
+                    .as_deref()
+                    .unwrap_or(NEUTRAL_EMOTION_ID)
             ),
         );
 
@@ -22141,6 +22485,341 @@ impl TTSScreen {
         self.view.redraw(cx);
     }
 
+    fn select_tts_emotion(&mut self, cx: &mut Cx, emotion_id: &str) {
+        self.tts_instruct_state
+            .select_preset(emotion_id, self.is_english());
+        self.view
+            .text_input(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .bottom_bar
+                    .instruct_section
+                    .instruct_editor
+                    .instruct_input
+            ))
+            .set_text(cx, self.tts_instruct_state.text());
+        self.update_tts_emotion_controls(cx);
+    }
+
+    fn update_tts_emotion_controls(&mut self, cx: &mut Cx) {
+        let english = self.is_english();
+        let dark_mode = self.dark_mode;
+        let neutral = tts_emotion::emotion_preset_or_neutral("neutral");
+        let happy = tts_emotion::emotion_preset_or_neutral("happy");
+        let angry = tts_emotion::emotion_preset_or_neutral("angry");
+        let sad = tts_emotion::emotion_preset_or_neutral("sad");
+        let gentle = tts_emotion::emotion_preset_or_neutral("gentle");
+        let excited = tts_emotion::emotion_preset_or_neutral("excited");
+
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .bottom_bar
+                    .emotion_row
+                    .emotion_label
+            ))
+            .set_text(cx, self.tr("情绪", "Emotion"));
+
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_neutral_btn
+            ))
+            .set_text(cx, neutral.label(english));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_happy_btn
+            ))
+            .set_text(cx, happy.label(english));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_angry_btn
+            ))
+            .set_text(cx, angry.label(english));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_sad_btn
+            ))
+            .set_text(cx, sad.label(english));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_gentle_btn
+            ))
+            .set_text(cx, gentle.label(english));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_excited_btn
+            ))
+            .set_text(cx, excited.label(english));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+            ))
+            .set_text(cx, self.tr("自定义", "Custom"));
+
+        let selection = self.tts_instruct_state.selection();
+        let neutral_active = if selection == TtsInstructSelection::Neutral {
+            1.0
+        } else {
+            0.0
+        };
+        let happy_active = if selection == TtsInstructSelection::Preset(happy.id) {
+            1.0
+        } else {
+            0.0
+        };
+        let angry_active = if selection == TtsInstructSelection::Preset(angry.id) {
+            1.0
+        } else {
+            0.0
+        };
+        let sad_active = if selection == TtsInstructSelection::Preset(sad.id) {
+            1.0
+        } else {
+            0.0
+        };
+        let gentle_active = if selection == TtsInstructSelection::Preset(gentle.id) {
+            1.0
+        } else {
+            0.0
+        };
+        let excited_active = if selection == TtsInstructSelection::Preset(excited.id) {
+            1.0
+        } else {
+            0.0
+        };
+        let custom_active = if selection == TtsInstructSelection::Custom {
+            1.0
+        } else {
+            0.0
+        };
+
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_neutral_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (neutral_active), dark_mode: (dark_mode) } draw_text: { active: (neutral_active), dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_happy_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (happy_active), dark_mode: (dark_mode) } draw_text: { active: (happy_active), dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_angry_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (angry_active), dark_mode: (dark_mode) } draw_text: { active: (angry_active), dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_sad_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (sad_active), dark_mode: (dark_mode) } draw_text: { active: (sad_active), dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_gentle_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (gentle_active), dark_mode: (dark_mode) } draw_text: { active: (gentle_active), dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_excited_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (excited_active), dark_mode: (dark_mode) } draw_text: { active: (excited_active), dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+            ))
+            .set_visible(cx, custom_active > 0.0);
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+            ))
+            .set_enabled(cx, false);
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (custom_active), dark_mode: (dark_mode) } draw_text: { active: (custom_active), dark_mode: (dark_mode) } });
+
+        self.update_tts_instruct_availability(cx);
+        self.update_tts_instruct_controls(cx);
+    }
+
+    fn selected_voice_is_builtin(&self) -> bool {
+        self.selected_voice_id
+            .as_ref()
+            .and_then(|id| self.library_voices.iter().find(|voice| &voice.id == id))
+            .map(|voice| voice.source == VoiceSource::Builtin)
+            .unwrap_or(false)
+    }
+
+    fn tts_instruct_supported(&self) -> bool {
+        tts_emotion::supports_custom_voice_instruct(
+            &self.app_preferences.inference_backend,
+            self.selected_voice_is_builtin(),
+        )
+    }
+
+    fn update_tts_instruct_availability(&mut self, cx: &mut Cx) {
+        let supported = self.tts_instruct_supported();
+        if !supported {
+            self.tts_instruct_state.collapse();
+        }
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .bottom_bar
+                    .emotion_row
+            ))
+            .set_visible(cx, supported);
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .bottom_bar
+                    .instruct_section
+            ))
+            .set_visible(cx, supported);
+    }
+
+    fn update_tts_instruct_controls(&mut self, cx: &mut Cx) {
+        let expanded = self.tts_instruct_state.editor_expanded();
+        let text = self.tts_instruct_state.text();
+        let count = self.tts_instruct_state.char_count();
+        let summary = if text.is_empty() {
+            self.tr("未设置指令", "No instruction").to_string()
+        } else {
+            let mut summary: String = text.chars().take(72).collect();
+            if count > 72 {
+                summary.push_str("...");
+            }
+            summary.replace('\n', " ")
+        };
+        let count_text = if count > tts_emotion::TTS_INSTRUCT_MAX_CHARS {
+            self.tr(
+                &format!(
+                    "超出 {} 字符",
+                    count - tts_emotion::TTS_INSTRUCT_MAX_CHARS
+                ),
+                &format!(
+                    "{} characters over",
+                    count - tts_emotion::TTS_INSTRUCT_MAX_CHARS
+                ),
+            )
+            .to_string()
+        } else {
+            self.tr(
+                &format!(
+                    "剩余 {} 字符",
+                    tts_emotion::TTS_INSTRUCT_MAX_CHARS - count
+                ),
+                &format!(
+                    "{} characters remaining",
+                    tts_emotion::TTS_INSTRUCT_MAX_CHARS - count
+                ),
+            )
+            .to_string()
+        };
+        let dark_mode = self.dark_mode;
+        let over_limit = if self.tts_instruct_state.is_over_limit() {
+            1.0
+        } else {
+            0.0
+        };
+
+        self.view
+            .view(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row
+            ))
+            .set_visible(cx, !expanded);
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.instruct_summary
+            ))
+            .set_text(cx, &summary);
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.instruct_summary
+            ))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.edit_instruct_btn
+            ))
+            .set_text(cx, self.tr("编辑指令", "Edit instruction"));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.edit_instruct_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor
+            ))
+            .set_visible(cx, expanded && self.tts_instruct_supported());
+        self.view
+            .text_input(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_input
+            ))
+            .apply_over(
+                cx,
+                live! {
+                    empty_text: (if self.is_english() {
+                        "Describe the tone, emotion, or delivery style"
+                    } else {
+                        "输入希望音色采用的语气、情绪或表达方式"
+                    })
+                    draw_bg: { dark_mode: (dark_mode) }
+                    draw_text: { dark_mode: (dark_mode) }
+                },
+            );
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
+            ))
+            .set_text(cx, &count_text);
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
+            ))
+            .set_visible(cx, count >= 180);
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
+            ))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode), over_limit: (over_limit) } });
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
+            ))
+            .set_text(cx, self.tr("收起", "Collapse"));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
+    }
+
     fn update_tts_param_controls(&mut self, cx: &mut Cx) {
         self.tts_speed = self.tts_speed.clamp(0.5, 2.0);
         self.tts_pitch = self.tts_pitch.clamp(-12.0, 12.0);
@@ -22791,6 +23470,7 @@ impl TTSScreen {
 
         // Apply to settings tabs and modal controls that depend on dark_mode
         self.update_tts_param_controls(cx);
+        self.update_tts_emotion_controls(cx);
         self.update_settings_tabs(cx);
         self.update_language_options(cx);
         self.update_theme_options(cx);
@@ -24981,6 +25661,7 @@ impl TTSScreen {
                 .set_visible(cx, false);
         }
         self.set_generate_button_loading(cx, self.tts_status == TTSStatus::Generating);
+        self.update_tts_emotion_controls(cx);
     }
 
     fn select_voice(&mut self, cx: &mut Cx, voice: Voice) {

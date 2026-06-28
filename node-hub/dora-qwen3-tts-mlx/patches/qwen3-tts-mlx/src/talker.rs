@@ -55,20 +55,16 @@ impl TalkerAttention {
         let values = self.v_proj.forward(x)?;
 
         // Reshape to [B, L, heads, head_dim] then transpose to [B, heads, L, head_dim]
-        let mut queries = self
-            .q_norm
-            .forward(
-                &queries
-                    .reshape(&[b, l, self.n_heads, -1])?
-                    .transpose_axes(&[0, 2, 1, 3])?,
-            )?;
-        let mut keys = self
-            .k_norm
-            .forward(
-                &keys
-                    .reshape(&[b, l, self.n_kv_heads, -1])?
-                    .transpose_axes(&[0, 2, 1, 3])?,
-            )?;
+        let mut queries = self.q_norm.forward(
+            &queries
+                .reshape(&[b, l, self.n_heads, -1])?
+                .transpose_axes(&[0, 2, 1, 3])?,
+        )?;
+        let mut keys = self.k_norm.forward(
+            &keys
+                .reshape(&[b, l, self.n_kv_heads, -1])?
+                .transpose_axes(&[0, 2, 1, 3])?,
+        )?;
         let values = values
             .reshape(&[b, l, self.n_kv_heads, -1])?
             .transpose_axes(&[0, 2, 1, 3])?;
@@ -211,20 +207,16 @@ impl CodePredictorAttention {
         let keys = self.k_proj.forward(x)?;
         let values = self.v_proj.forward(x)?;
 
-        let mut queries = self
-            .q_norm
-            .forward(
-                &queries
-                    .reshape(&[b, l, self.n_heads, -1])?
-                    .transpose_axes(&[0, 2, 1, 3])?,
-            )?;
-        let mut keys = self
-            .k_norm
-            .forward(
-                &keys
-                    .reshape(&[b, l, self.n_kv_heads, -1])?
-                    .transpose_axes(&[0, 2, 1, 3])?,
-            )?;
+        let mut queries = self.q_norm.forward(
+            &queries
+                .reshape(&[b, l, self.n_heads, -1])?
+                .transpose_axes(&[0, 2, 1, 3])?,
+        )?;
+        let mut keys = self.k_norm.forward(
+            &keys
+                .reshape(&[b, l, self.n_kv_heads, -1])?
+                .transpose_axes(&[0, 2, 1, 3])?,
+        )?;
         let values = values
             .reshape(&[b, l, self.n_kv_heads, -1])?
             .transpose_axes(&[0, 2, 1, 3])?;
@@ -295,11 +287,14 @@ pub struct CodePredictor {
 impl CodePredictor {
     /// Generate codebooks 1-15 autoregressively for one time step.
     /// Takes the talker's last hidden state and the codebook-0 embedding (both in talker dim).
-    /// Always uses greedy decoding (argmax) for deterministic sub-code generation.
+    /// Uses generation-configured sampling for sub-code generation.
     pub fn generate_codes(
         &mut self,
         talker_hidden: &Array, // [B, 1, talker_hidden_size=2048]
         code0_embed: &Array,   // [B, 1, talker_hidden_size=2048]
+        temperature: f32,
+        top_k: i32,
+        top_p: f32,
     ) -> Result<Vec<u32>> {
         let mut codes = Vec::with_capacity(15);
 
@@ -314,14 +309,11 @@ impl CodePredictor {
         }
 
         // Concatenate to form 2-token prefill: [past_hidden, code0_embed]
-        let prefill_input =
-            mlx_rs::ops::concatenate_axis(&[&proj_hidden, &proj_code0], 1)?;
+        let prefill_input = mlx_rs::ops::concatenate_axis(&[&proj_hidden, &proj_code0], 1)?;
         eval(std::iter::once(&prefill_input))?;
 
         // Initialize KV caches for code predictor (fresh per time step)
-        let mut caches: Vec<KVCache> = (0..self.layers.len())
-            .map(|_| KVCache::new())
-            .collect();
+        let mut caches: Vec<KVCache> = (0..self.layers.len()).map(|_| KVCache::new()).collect();
 
         // Prefill with 2 tokens
         let mut current_output = prefill_input;
@@ -336,8 +328,7 @@ impl CodePredictor {
         let last_normed = normed.index((.., -1.., ..)); // [B, 1, 1024]
         let logits = self.lm_heads[0].forward(&last_normed)?;
         eval([&logits])?;
-        // Greedy decoding (argmax) for code predictor
-        let token = sample_logits(&logits, 0.0, 0, 1.0, 1.0, &[], None)?;
+        let token = sample_logits(&logits, temperature, top_k, top_p, 1.0, &[], None)?;
         codes.push(token);
 
         // Autoregressive for codebooks 2-15
@@ -359,7 +350,7 @@ impl CodePredictor {
             let logits = self.lm_heads[g].forward(&normed)?;
             eval([&logits])?;
             // Greedy decoding (argmax) for code predictor
-            let token = sample_logits(&logits, 0.0, 0, 1.0, 1.0, &[], None)?;
+            let token = sample_logits(&logits, temperature, top_k, top_p, 1.0, &[], None)?;
             codes.push(token);
         }
 
@@ -399,9 +390,7 @@ pub struct Talker {
 impl Talker {
     /// Reset KV caches (call before each generation)
     pub fn reset_caches(&mut self) {
-        self.caches = (0..self.layers.len())
-            .map(|_| KVCache::new())
-            .collect();
+        self.caches = (0..self.layers.len()).map(|_| KVCache::new()).collect();
     }
 
     /// Forward one step of the talker.
@@ -496,7 +485,9 @@ impl Talker {
         let codec_embed = self.codec_embedding.forward(&code_arr)?;
 
         // Ensure float32 for consistent dtype through transformer
-        Ok(text_embed.add(codec_embed)?.as_dtype(mlx_rs::Dtype::Float32)?)
+        Ok(text_embed
+            .add(codec_embed)?
+            .as_dtype(mlx_rs::Dtype::Float32)?)
     }
 
     /// Build batched prefill embedding for ALL positions at once.
@@ -533,13 +524,14 @@ impl Talker {
             for i in 0..no_codec_positions * hidden {
                 codec_vec[i] = 0.0;
             }
-            let codec_zeroed = Array::from_slice(
-                &codec_vec,
-                &[1, seq_len as i32, hidden as i32],
-            );
-            Ok(text_proj.add(codec_zeroed)?.as_dtype(mlx_rs::Dtype::Float32)?)
+            let codec_zeroed = Array::from_slice(&codec_vec, &[1, seq_len as i32, hidden as i32]);
+            Ok(text_proj
+                .add(codec_zeroed)?
+                .as_dtype(mlx_rs::Dtype::Float32)?)
         } else {
-            Ok(text_proj.add(codec_embed)?.as_dtype(mlx_rs::Dtype::Float32)?)
+            Ok(text_proj
+                .add(codec_embed)?
+                .as_dtype(mlx_rs::Dtype::Float32)?)
         }
     }
 
@@ -551,6 +543,84 @@ impl Talker {
         let embed = self.text_embedding.forward(&arr)?;
         let projected = self.text_projection.forward(&embed)?;
         Ok(projected.as_dtype(mlx_rs::Dtype::Float32)?)
+    }
+
+    /// Build CustomVoice prefill embedding matching official non-streaming mode.
+    ///
+    /// Layout:
+    ///   [optional instruct text-only]
+    ///   [assistant role tokens 0..3 text-only]
+    ///   [tts_pad x prefix + tts_bos] + [codec_prefix + codec_pad]
+    ///   [target text ids 3:-5 + tts_eos] + codec_pad
+    ///   [tts_pad] + codec_bos
+    pub fn build_custom_voice_prefill_embedding(
+        &mut self,
+        instruct_tokens: &[u32],
+        assistant_input_tokens: &[u32],
+        codec_prefix: &[u32],
+        tts_config: &crate::config::Qwen3TtsConfig,
+    ) -> Result<Array> {
+        let hidden_size = self.config.hidden_size;
+        let pad_id = tts_config.talker_config.codec_pad_id;
+        let bos_id = tts_config.talker_config.codec_bos_id;
+
+        let instruct_embed = if instruct_tokens.is_empty() {
+            zeros::<f32>(&[1, 0, hidden_size])?
+        } else {
+            self.build_projected_text_embeddings(instruct_tokens)?
+        };
+
+        let role_tokens: Vec<u32> = if assistant_input_tokens.len() >= 3 {
+            assistant_input_tokens[..3].to_vec()
+        } else {
+            vec![
+                tts_config.im_start_token_id,
+                tts_config.assistant_token_id,
+                198u32,
+            ]
+        };
+        let role_embed = self.build_projected_text_embeddings(&role_tokens)?;
+
+        let mut text_overlay_ids = vec![tts_config.tts_pad_token_id; codec_prefix.len()];
+        text_overlay_ids.push(tts_config.tts_bos_token_id);
+        let text_overlay = self.build_projected_text_embeddings(&text_overlay_ids)?;
+
+        let mut codec_ids: Vec<u32> = codec_prefix.to_vec();
+        codec_ids.push(pad_id);
+        let codec_ids_i32: Vec<i32> = codec_ids.iter().map(|&c| c as i32).collect();
+        let codec_arr = Array::from_slice(&codec_ids_i32, &[1, codec_ids_i32.len() as i32]);
+        let codec_embed = self.codec_embedding.forward(&codec_arr)?;
+        let codec_overlay = text_overlay.add(codec_embed)?;
+
+        let target_text_ids = crate::generate::assistant_target_ids_with_eos(
+            assistant_input_tokens,
+            tts_config.tts_eos_token_id,
+        );
+        let target_text_embed = self.build_projected_text_embeddings(&target_text_ids)?;
+        let pad_arr = Array::from_slice(&[pad_id as i32], &[1, 1]);
+        let pad_embed = self.codec_embedding.forward(&pad_arr)?;
+        let pad_broadcast = mlx_rs::ops::broadcast_to(
+            &pad_embed,
+            &[1, target_text_ids.len() as i32, pad_embed.dim(2) as i32],
+        )?;
+        let target_block = target_text_embed.add(&pad_broadcast)?;
+
+        let tts_pad_embed = self.build_projected_text_embeddings(&[tts_config.tts_pad_token_id])?;
+        let bos_arr = Array::from_slice(&[bos_id as i32], &[1, 1]);
+        let bos_embed = self.codec_embedding.forward(&bos_arr)?;
+        let final_bos = tts_pad_embed.add(bos_embed)?;
+
+        let all = mlx_rs::ops::concatenate_axis(
+            &[
+                &instruct_embed,
+                &role_embed,
+                &codec_overlay,
+                &target_block,
+                &final_bos,
+            ],
+            1,
+        )?;
+        Ok(all.as_dtype(mlx_rs::Dtype::Float32)?)
     }
 
     /// Build batched prefill embedding for VoiceDesign mode.
@@ -612,7 +682,12 @@ impl Talker {
 
         // Concatenate all parts along sequence axis: [1, N+3+5+1, hidden]
         let all = mlx_rs::ops::concatenate_axis(
-            &[&instruct_embed, &role_embed, &codec_overlay, &first_combined],
+            &[
+                &instruct_embed,
+                &role_embed,
+                &codec_overlay,
+                &first_combined,
+            ],
             1,
         )?;
         Ok(all.as_dtype(mlx_rs::Dtype::Float32)?)
@@ -631,7 +706,7 @@ impl Talker {
     pub fn build_voice_clone_prefill_embedding(
         &mut self,
         text_tokens: &[u32],
-        codec_prefix: &[u32],  // e.g., [nothink, think_bos, think_eos] (3) or [think, think_bos, lang, think_eos] (4)
+        codec_prefix: &[u32], // e.g., [nothink, think_bos, think_eos] (3) or [think, think_bos, lang, think_eos] (4)
         speaker_embedding: &Array, // [1, enc_dim] from ECAPA-TDNN
         tts_config: &crate::config::Qwen3TtsConfig,
     ) -> Result<Array> {
@@ -698,7 +773,7 @@ impl Talker {
     /// For explicit language (N=4): 9 total positions
     pub fn build_icl_prefill_embedding(
         &mut self,
-        codec_prefix: &[u32],  // [nothink, think_bos, think_eos] (3) or [think, think_bos, lang, think_eos] (4)
+        codec_prefix: &[u32], // [nothink, think_bos, think_eos] (3) or [think, think_bos, lang, think_eos] (4)
         speaker_embedding: &Array, // [1, enc_dim] from ECAPA-TDNN
         tts_config: &crate::config::Qwen3TtsConfig,
     ) -> Result<Array> {
@@ -733,10 +808,8 @@ impl Talker {
         let bos_pos = tts_bos_embed.add(pad_embed)?;
 
         // Concatenate: [1, 3+N+2, hidden]
-        let all = mlx_rs::ops::concatenate_axis(
-            &[&role_embed, &codec_overlay, &spk_pos, &bos_pos],
-            1,
-        )?;
+        let all =
+            mlx_rs::ops::concatenate_axis(&[&role_embed, &codec_overlay, &spk_pos, &bos_pos], 1)?;
         Ok(all.as_dtype(mlx_rs::Dtype::Float32)?)
     }
 
@@ -776,9 +849,9 @@ impl Talker {
     /// - trailing_len: number of trailing text tokens
     pub fn build_icl_prompt(
         &mut self,
-        ref_text_ids: &[u32],      // tokenized reference text
-        target_text_ids: &[u32],    // tokenized target text
-        ref_codec_embed: &Array,    // [1, T_ref, hidden] from sum_ref_codec_embeddings
+        ref_text_ids: &[u32],    // tokenized reference text
+        target_text_ids: &[u32], // tokenized target text
+        ref_codec_embed: &Array, // [1, T_ref, hidden] from sum_ref_codec_embeddings
         tts_config: &crate::config::Qwen3TtsConfig,
         non_streaming_mode: bool,
     ) -> Result<(Array, Array, usize)> {
@@ -796,10 +869,7 @@ impl Talker {
         // codec_embed: [codec_bos, ref_codes_summed] [1, T2, hidden]
         let bos_arr = Array::from_slice(&[bos_id as i32], &[1, 1]);
         let bos_embed = self.codec_embedding.forward(&bos_arr)?;
-        let codec_embed = mlx_rs::ops::concatenate_axis(
-            &[&bos_embed, ref_codec_embed],
-            1,
-        )?;
+        let codec_embed = mlx_rs::ops::concatenate_axis(&[&bos_embed, ref_codec_embed], 1)?;
         let codec_lens = codec_embed.dim(1) as usize;
 
         let tts_pad_embed = self.build_text_only_embedding(tts_config.tts_pad_token_id)?; // [1, 1, hidden]
@@ -820,10 +890,7 @@ impl Talker {
             )?;
             let codec_block = tts_pad_broadcast.add(&codec_embed)?;
 
-            let icl_embed = mlx_rs::ops::concatenate_axis(
-                &[&text_block, &codec_block],
-                1,
-            )?;
+            let icl_embed = mlx_rs::ops::concatenate_axis(&[&text_block, &codec_block], 1)?;
             Ok((icl_embed, tts_pad_embed, 0))
         } else {
             // Streaming (default): text and codec overlaid element-wise
@@ -842,10 +909,8 @@ impl Talker {
                         &tts_pad_embed,
                         &[1, pad_count as i32, tts_pad_embed.dim(2) as i32],
                     )?;
-                    let text_padded = mlx_rs::ops::concatenate_axis(
-                        &[&text_embed, &pad_broadcast],
-                        1,
-                    )?;
+                    let text_padded =
+                        mlx_rs::ops::concatenate_axis(&[&text_embed, &pad_broadcast], 1)?;
                     let icl_embed = text_padded.add(&codec_embed)?;
                     Ok((icl_embed, tts_pad_embed, 0))
                 } else {
@@ -932,10 +997,7 @@ fn make_quantized_linear_with_bias(
     Ok((ql, bias))
 }
 
-fn make_linear(
-    weights: &HashMap<String, Array>,
-    prefix: &str,
-) -> Result<nn::Linear> {
+fn make_linear(weights: &HashMap<String, Array>, prefix: &str) -> Result<nn::Linear> {
     let weight = get_weight(weights, &format!("{prefix}.weight"))?;
     let bias = get_weight_optional(weights, &format!("{prefix}.bias"));
     Ok(nn::Linear {
@@ -967,7 +1029,12 @@ fn load_maybe_quantized(
     quant: Option<&QuantizationConfig>,
 ) -> Result<MaybeQuantized<nn::Linear>> {
     if let Some(q) = quant {
-        Ok(MaybeQuantized::Quantized(make_quantized_linear(weights, prefix, q.group_size, q.bits)?))
+        Ok(MaybeQuantized::Quantized(make_quantized_linear(
+            weights,
+            prefix,
+            q.group_size,
+            q.bits,
+        )?))
     } else {
         Ok(MaybeQuantized::Original(make_linear(weights, prefix)?))
     }
@@ -1062,7 +1129,12 @@ fn load_code_predictor_attention(
     })
 }
 
-pub fn load_talker(model_dir: &Path, config: &TalkerConfig, quant: Option<&QuantizationConfig>, tts_pad_token_id: u32) -> Result<Talker> {
+pub fn load_talker(
+    model_dir: &Path,
+    config: &TalkerConfig,
+    quant: Option<&QuantizationConfig>,
+    tts_pad_token_id: u32,
+) -> Result<Talker> {
     // Load all weights
     let weights = load_all_weights(model_dir)?;
 
@@ -1077,16 +1149,10 @@ pub fn load_talker(model_dir: &Path, config: &TalkerConfig, quant: Option<&Quant
     };
 
     // Text projection
-    let (fc1, fc1_bias) = load_maybe_quantized_with_bias(
-        &weights,
-        "talker.text_projection.linear_fc1",
-        quant,
-    )?;
-    let (fc2, fc2_bias) = load_maybe_quantized_with_bias(
-        &weights,
-        "talker.text_projection.linear_fc2",
-        quant,
-    )?;
+    let (fc1, fc1_bias) =
+        load_maybe_quantized_with_bias(&weights, "talker.text_projection.linear_fc1", quant)?;
+    let (fc2, fc2_bias) =
+        load_maybe_quantized_with_bias(&weights, "talker.text_projection.linear_fc2", quant)?;
     let text_projection = TextProjection {
         fc1,
         fc1_bias,
@@ -1098,12 +1164,7 @@ pub fn load_talker(model_dir: &Path, config: &TalkerConfig, quant: Option<&Quant
     let mut layers = Vec::with_capacity(config.num_hidden_layers as usize);
     for i in 0..config.num_hidden_layers {
         let prefix = format!("talker.model.layers.{i}");
-        let attn = load_talker_attention(
-            &weights,
-            &format!("{prefix}.self_attn"),
-            config,
-            quant,
-        )?;
+        let attn = load_talker_attention(&weights, &format!("{prefix}.self_attn"), config, quant)?;
         let mlp = load_mlp(&weights, &format!("{prefix}.mlp"), quant)?;
         let block = TalkerBlock {
             self_attn: attn,

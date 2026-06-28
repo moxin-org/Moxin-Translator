@@ -9,8 +9,8 @@
 //!   segment_complete – Float32Array (empty)
 //!   log              – StringArray
 
-mod protocol;
 mod audio_post;
+mod protocol;
 
 use anyhow::{anyhow, Context, Result};
 use arrow::array::{Array, StringArray};
@@ -27,6 +27,7 @@ struct TtsParams {
     speed: Option<f32>,
     pitch: Option<f32>,
     volume: Option<f32>,
+    instruct: Option<String>,
 }
 
 fn parse_text_and_params(raw: &str) -> (String, TtsParams) {
@@ -43,19 +44,32 @@ fn parse_text_and_params(raw: &str) -> (String, TtsParams) {
         };
 
         if params.speed.is_none() {
-            params.speed = v
-                .get("speed")
-                .and_then(|x| x.as_f64().map(|n| n as f32).or_else(|| x.as_str()?.parse::<f32>().ok()));
+            params.speed = v.get("speed").and_then(|x| {
+                x.as_f64()
+                    .map(|n| n as f32)
+                    .or_else(|| x.as_str()?.parse::<f32>().ok())
+            });
         }
         if params.pitch.is_none() {
-            params.pitch = v
-                .get("pitch")
-                .and_then(|x| x.as_f64().map(|n| n as f32).or_else(|| x.as_str()?.parse::<f32>().ok()));
+            params.pitch = v.get("pitch").and_then(|x| {
+                x.as_f64()
+                    .map(|n| n as f32)
+                    .or_else(|| x.as_str()?.parse::<f32>().ok())
+            });
         }
         if params.volume.is_none() {
-            params.volume = v
-                .get("volume")
-                .and_then(|x| x.as_f64().map(|n| n as f32).or_else(|| x.as_str()?.parse::<f32>().ok()));
+            params.volume = v.get("volume").and_then(|x| {
+                x.as_f64()
+                    .map(|n| n as f32)
+                    .or_else(|| x.as_str()?.parse::<f32>().ok())
+            });
+        }
+        if params.instruct.is_none() {
+            params.instruct = v
+                .get("instruct")
+                .and_then(|x| x.as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
         }
 
         if let Some(prompt) = v.get("prompt").and_then(|p| p.as_str()) {
@@ -129,7 +143,9 @@ fn model_dir_ready(model_dir: &Path) -> bool {
         && (model_dir.join("model.safetensors").exists()
             || model_dir.join("model.safetensors.index.json").exists())
         && model_dir.join("speech_tokenizer/config.json").exists()
-        && model_dir.join("speech_tokenizer/model.safetensors").exists()
+        && model_dir
+            .join("speech_tokenizer/model.safetensors")
+            .exists()
 }
 
 fn resample_linear(input: &[f32], in_sr: u32, out_sr: u32) -> Vec<f32> {
@@ -157,8 +173,8 @@ fn resample_linear(input: &[f32], in_sr: u32, out_sr: u32) -> Vec<f32> {
 }
 
 fn load_wav_mono_f32(path: &str) -> Result<(Vec<f32>, u32)> {
-    let mut reader = hound::WavReader::open(path)
-        .with_context(|| format!("failed to open wav: {}", path))?;
+    let mut reader =
+        hound::WavReader::open(path).with_context(|| format!("failed to open wav: {}", path))?;
     let spec = reader.spec();
     let channels = spec.channels.max(1) as usize;
 
@@ -180,7 +196,8 @@ fn load_wav_mono_f32(path: &str) -> Result<(Vec<f32>, u32)> {
                 // 24/32-bit PCM
                 let scale = ((1_i64 << (bits.saturating_sub(1) as u32)) - 1) as f32;
                 for s in reader.samples::<i32>() {
-                    interleaved.push((s.context("invalid i32 wav sample")? as f32) / scale.max(1.0));
+                    interleaved
+                        .push((s.context("invalid i32 wav sample")? as f32) / scale.max(1.0));
                 }
             }
         }
@@ -340,7 +357,11 @@ fn prepare_reference_audio_for_clone(
 }
 
 fn choose_speaker(synth: &Synthesizer, requested: &str, language: &str) -> String {
-    let speakers: Vec<String> = synth.speakers().into_iter().map(|s| s.to_string()).collect();
+    let speakers: Vec<String> = synth
+        .speakers()
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
     if speakers.is_empty() {
         tracing::warn!(
             "Qwen speaker list empty, fallback speaker='vivian' (requested='{}', language='{}')",
@@ -351,11 +372,7 @@ fn choose_speaker(synth: &Synthesizer, requested: &str, language: &str) -> Strin
     }
 
     let req = requested.trim().to_lowercase();
-    if let Some(hit) = speakers
-        .iter()
-        .find(|s| s.to_lowercase() == req)
-        .cloned()
-    {
+    if let Some(hit) = speakers.iter().find(|s| s.to_lowercase() == req).cloned() {
         tracing::info!(
             "Qwen speaker resolved: requested='{}' -> speaker='{}' (language='{}', mode=direct_match)",
             requested,
@@ -401,15 +418,21 @@ fn choose_speaker(synth: &Synthesizer, requested: &str, language: &str) -> Strin
     }
 }
 
-fn resolve_max_new_tokens() -> i32 {
-    std::env::var("MOXIN_QWEN_MAX_NEW_TOKENS")
-        .ok()
-        .and_then(|v| v.parse::<i32>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(4096)
+fn parse_max_new_tokens_override(raw: Option<&str>) -> Option<i32> {
+    raw.and_then(|value| value.parse::<i32>().ok())
+        .filter(|value| *value > 0)
 }
 
-fn synthesize_qwen(state: &mut QwenState, request: TtsRequest, _params: &TtsParams) -> Result<(Vec<f32>, u32)> {
+fn resolve_max_new_tokens() -> Option<i32> {
+    let raw = std::env::var("MOXIN_QWEN_MAX_NEW_TOKENS").ok();
+    parse_max_new_tokens_override(raw.as_deref())
+}
+
+fn synthesize_qwen(
+    state: &mut QwenState,
+    request: TtsRequest,
+    params: &TtsParams,
+) -> Result<(Vec<f32>, u32)> {
     match request {
         TtsRequest::Preset { voice, text } => {
             let synth = state.customvoice()?;
@@ -417,7 +440,7 @@ fn synthesize_qwen(state: &mut QwenState, request: TtsRequest, _params: &TtsPara
             let speaker = choose_speaker(synth, &voice, &lang);
             let max_new_tokens = resolve_max_new_tokens();
             tracing::info!(
-                "Qwen generation config: speaker='{}', language='{}', max_new_tokens={}",
+                "Qwen generation config: speaker='{}', language='{}', max_new_tokens_override={:?}",
                 speaker,
                 lang,
                 max_new_tokens
@@ -425,7 +448,8 @@ fn synthesize_qwen(state: &mut QwenState, request: TtsRequest, _params: &TtsPara
             let options = SynthesizeOptions {
                 speaker: &speaker,
                 language: &lang,
-                max_new_tokens: Some(max_new_tokens),
+                instruct: params.instruct.as_deref(),
+                max_new_tokens,
                 ..Default::default()
             };
             let samples = synth.synthesize(&text, &options)?;
@@ -444,14 +468,14 @@ fn synthesize_qwen(state: &mut QwenState, request: TtsRequest, _params: &TtsPara
             let synth = state.base()?;
             let max_new_tokens = resolve_max_new_tokens();
             tracing::info!(
-                "Qwen clone generation config: language='{}', max_new_tokens={}",
+                "Qwen clone generation config: language='{}', max_new_tokens_override={:?}",
                 lang,
                 max_new_tokens
             );
 
             let options = SynthesizeOptions {
                 language: &lang,
-                max_new_tokens: Some(max_new_tokens),
+                max_new_tokens,
                 ..Default::default()
             };
 
@@ -475,10 +499,7 @@ fn synthesize_qwen(state: &mut QwenState, request: TtsRequest, _params: &TtsPara
                 ) {
                     Ok(samples) => samples,
                     Err(err) => {
-                        tracing::warn!(
-                            "ICL clone failed, fallback to x-vector mode: {}",
-                            err
-                        );
+                        tracing::warn!("ICL clone failed, fallback to x-vector mode: {}", err);
                         synth.synthesize_voice_clone_cached(
                             &text,
                             &ref_audio_24k,
@@ -500,7 +521,10 @@ fn synthesize_qwen(state: &mut QwenState, request: TtsRequest, _params: &TtsPara
 fn send_audio(node: &mut DoraNode, samples: &[f32], sample_rate: u32) -> Result<()> {
     let data = samples.to_vec().into_arrow();
     let mut params: BTreeMap<String, Parameter> = BTreeMap::new();
-    params.insert("sample_rate".to_string(), Parameter::Integer(sample_rate as i64));
+    params.insert(
+        "sample_rate".to_string(),
+        Parameter::Integer(sample_rate as i64),
+    );
     node.send_output("audio".into(), params, data)
         .map_err(|e| anyhow!("send_output(audio) failed: {}", e))
 }
@@ -534,8 +558,8 @@ fn main() -> Result<()> {
 
     tracing::info!("qwen-tts-node starting");
 
-    let (mut node, mut events) = DoraNode::init_from_env()
-        .map_err(|e| anyhow!("Failed to init Dora node: {}", e))?;
+    let (mut node, mut events) =
+        DoraNode::init_from_env().map_err(|e| anyhow!("Failed to init Dora node: {}", e))?;
 
     tracing::info!("Connected to Dora dataflow");
 
@@ -568,10 +592,11 @@ fn main() -> Result<()> {
                 };
 
                 tracing::info!(
-                    "Qwen request: speed={:?}, pitch={:?}, volume={:?}",
+                    "Qwen request: speed={:?}, pitch={:?}, volume={:?}, instruct={}",
                     params.speed,
                     params.pitch,
-                    params.volume
+                    params.volume,
+                    params.instruct.is_some()
                 );
                 send_status(&mut node, "synthesizing")?;
 
@@ -605,4 +630,40 @@ fn main() -> Result<()> {
 
     tracing::info!("qwen-tts-node stopped");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_text_and_params_extracts_instruct_from_payload() {
+        let raw = r#"{"prompt":"VOICE:vivian|你好","speed":1.1,"pitch":2,"volume":80,"instruct":"用特别开心的语气说"}"#;
+
+        let (text, params) = parse_text_and_params(raw);
+
+        assert_eq!(text, "VOICE:vivian|你好");
+        assert_eq!(params.speed, Some(1.1));
+        assert_eq!(params.pitch, Some(2.0));
+        assert_eq!(params.volume, Some(80.0));
+        assert_eq!(params.instruct.as_deref(), Some("用特别开心的语气说"));
+    }
+
+    #[test]
+    fn parse_text_and_params_preserves_nonempty_instruct() {
+        let raw = r#"{"prompt":"hello","instruct":"  "}"#;
+
+        let (_text, params) = parse_text_and_params(raw);
+
+        assert_eq!(params.instruct.as_deref(), Some("  "));
+    }
+
+    #[test]
+    fn max_new_tokens_override_is_only_set_for_positive_values() {
+        assert_eq!(parse_max_new_tokens_override(None), None);
+        assert_eq!(parse_max_new_tokens_override(Some("")), None);
+        assert_eq!(parse_max_new_tokens_override(Some("0")), None);
+        assert_eq!(parse_max_new_tokens_override(Some("-1")), None);
+        assert_eq!(parse_max_new_tokens_override(Some("4096")), Some(4096));
+    }
 }
