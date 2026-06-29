@@ -18,6 +18,7 @@ use crate::voice_clone_modal::{CloneMode, VoiceCloneModalAction, VoiceCloneModal
 use crate::voice_data::{LanguageFilter, TTSStatus, Voice, VoiceFilter, VoiceSource};
 use crate::voice_selector::{VoiceSelectorAction, VoiceSelectorWidgetExt};
 use hound::WavReader;
+use makepad_widgets::makepad_draw::text::selection::Cursor;
 use makepad_widgets::*;
 use std::fs;
 use std::fs::OpenOptions;
@@ -49,6 +50,27 @@ enum TtsParamSliderKind {
     Speed,
     Pitch,
     Volume,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TtsInputClickDisposition {
+    LetInputHandle,
+    MoveMainCursorToEnd,
+    CollapseSelections,
+}
+
+fn tts_input_click_disposition(
+    clicked_main_text_input: bool,
+    clicked_main_input_container: bool,
+    clicked_instruct_input: bool,
+) -> TtsInputClickDisposition {
+    if clicked_main_text_input || clicked_instruct_input {
+        TtsInputClickDisposition::LetInputHandle
+    } else if clicked_main_input_container {
+        TtsInputClickDisposition::MoveMainCursorToEnd
+    } else {
+        TtsInputClickDisposition::CollapseSelections
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -8675,6 +8697,7 @@ impl Widget for TTSScreen {
         let actions = cx.capture_actions(|cx| {
             self.view.handle_event(cx, event, scope);
         });
+        self.handle_tts_input_selection_click(cx, event);
 
         // Initialize audio player (24kHz = Qwen3-TTS native output rate)
         if self.audio_player.is_none() {
@@ -13090,6 +13113,96 @@ impl Widget for TTSScreen {
 }
 
 impl TTSScreen {
+    fn handle_tts_input_selection_click(&mut self, cx: &mut Cx, event: &Event) {
+        if self.current_page != AppPage::TextToSpeech {
+            return;
+        }
+
+        let Some(click_abs) = Self::primary_click_abs(event) else {
+            return;
+        };
+
+        let main_input = self.view.text_input(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .tts_page
+                .cards_container
+                .input_section
+                .input_container
+                .text_input
+        ));
+        let main_container_area = self
+            .view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_container
+            ))
+            .area();
+        let instruct_input = self.view.text_input(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .tts_page
+                .cards_container
+                .input_section
+                .bottom_bar
+                .instruct_section
+                .instruct_editor
+                .instruct_input
+        ));
+
+        let clicked_main_input = main_input.area().rect(cx).contains(click_abs);
+        let clicked_main_container = main_container_area.rect(cx).contains(click_abs);
+        let clicked_instruct_input = instruct_input.area().rect(cx).contains(click_abs);
+
+        match tts_input_click_disposition(
+            clicked_main_input,
+            clicked_main_container,
+            clicked_instruct_input,
+        ) {
+            TtsInputClickDisposition::LetInputHandle => {}
+            TtsInputClickDisposition::MoveMainCursorToEnd => {
+                let end = main_input.text().len();
+                main_input.set_cursor(
+                    cx,
+                    Cursor {
+                        index: end,
+                        prefer_next_row: false,
+                    },
+                    false,
+                );
+                main_input.set_key_focus(cx);
+            }
+            TtsInputClickDisposition::CollapseSelections => {
+                Self::collapse_text_input_selection(cx, &main_input);
+                Self::collapse_text_input_selection(cx, &instruct_input);
+            }
+        }
+    }
+
+    fn primary_click_abs(event: &Event) -> Option<DVec2> {
+        match event {
+            Event::MouseUp(mu) => Some(mu.abs),
+            _ => None,
+        }
+    }
+
+    fn collapse_text_input_selection(cx: &mut Cx, input: &TextInputRef) {
+        let selection = input.selection();
+        if selection.cursor != selection.anchor {
+            input.set_cursor(cx, selection.cursor, false);
+        }
+    }
+
     fn ensure_bundle_bin_on_path() {
         let Some(exe_path) = std::env::current_exe().ok() else {
             return;
@@ -26736,7 +26849,8 @@ mod tests {
     use super::{
         runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
-        AppPage, DownloadFormat, RuntimeInitState, TTSScreen,
+        tts_input_click_disposition, AppPage, DownloadFormat, RuntimeInitState,
+        TtsInputClickDisposition, TTSScreen,
     };
 
     #[test]
@@ -26828,6 +26942,34 @@ mod tests {
         assert_eq!(
             TTSScreen::download_format_for_availability("wav", false),
             DownloadFormat::Wav
+        );
+    }
+
+    #[test]
+    fn tts_input_text_area_clicks_are_handled_by_the_text_input() {
+        assert_eq!(
+            tts_input_click_disposition(true, true, false),
+            TtsInputClickDisposition::LetInputHandle
+        );
+        assert_eq!(
+            tts_input_click_disposition(false, false, true),
+            TtsInputClickDisposition::LetInputHandle
+        );
+    }
+
+    #[test]
+    fn tts_main_input_blank_space_click_moves_cursor_to_end() {
+        assert_eq!(
+            tts_input_click_disposition(false, true, false),
+            TtsInputClickDisposition::MoveMainCursorToEnd
+        );
+    }
+
+    #[test]
+    fn tts_input_external_click_collapses_any_visible_selection() {
+        assert_eq!(
+            tts_input_click_disposition(false, false, false),
+            TtsInputClickDisposition::CollapseSelections
         );
     }
 }
