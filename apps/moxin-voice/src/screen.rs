@@ -318,6 +318,91 @@ fn get_project_tts_models() -> Vec<TtsModelOption> {
 
 const TTS_INPUT_MAX_CHARS: usize = 1000;
 
+fn split_tts_text_segments(text: &str, max_chars: usize) -> Vec<String> {
+    if max_chars == 0 {
+        return Vec::new();
+    }
+
+    let mut segments = Vec::new();
+    let mut remaining = text.trim_start();
+
+    while !remaining.is_empty() {
+        if remaining.chars().count() <= max_chars {
+            let segment = remaining.trim().to_string();
+            if !segment.is_empty() {
+                segments.push(segment);
+            }
+            break;
+        }
+
+        let limit_byte = remaining
+            .char_indices()
+            .nth(max_chars)
+            .map(|(idx, _)| idx)
+            .unwrap_or(remaining.len());
+        let prefix = &remaining[..limit_byte];
+        let split_byte = natural_tts_split_byte(prefix).unwrap_or(limit_byte);
+        let segment = remaining[..split_byte].trim().to_string();
+
+        if segment.is_empty() {
+            let hard_segment = remaining[..limit_byte].to_string();
+            segments.push(hard_segment);
+            remaining = remaining[limit_byte..].trim_start();
+        } else {
+            segments.push(segment);
+            remaining = remaining[split_byte..].trim_start();
+        }
+    }
+
+    segments
+}
+
+fn natural_tts_split_byte(prefix: &str) -> Option<usize> {
+    find_last_paragraph_boundary(prefix)
+        .or_else(|| find_last_char_boundary_after(prefix, is_sentence_boundary))
+        .or_else(|| find_last_char_boundary_after(prefix, is_clause_boundary))
+        .or_else(|| find_last_char_boundary_before(prefix, char::is_whitespace))
+}
+
+fn find_last_paragraph_boundary(text: &str) -> Option<usize> {
+    text.rfind("\n\n")
+        .map(|idx| idx + "\n\n".len())
+        .filter(|idx| *idx > 0)
+}
+
+fn find_last_char_boundary_after(text: &str, predicate: fn(char) -> bool) -> Option<usize> {
+    text.char_indices()
+        .filter_map(|(idx, ch)| {
+            if predicate(ch) {
+                Some(idx + ch.len_utf8())
+            } else {
+                None
+            }
+        })
+        .last()
+        .filter(|idx| *idx > 0)
+}
+
+fn find_last_char_boundary_before(text: &str, predicate: fn(char) -> bool) -> Option<usize> {
+    text.char_indices()
+        .filter_map(|(idx, ch)| {
+            if predicate(ch) && idx > 0 {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .last()
+}
+
+fn is_sentence_boundary(ch: char) -> bool {
+    matches!(ch, '.' | '!' | '?' | '。' | '！' | '？' | '…' | '।')
+}
+
+fn is_clause_boundary(ch: char) -> bool {
+    matches!(ch, ',' | ';' | ':' | '，' | '、' | '；' | '：' | '،' | '؛')
+}
+
 live_design! {
     use link::theme::*;
     use link::shaders::*;
@@ -8407,6 +8492,10 @@ pub struct TTSScreen {
     #[rust]
     pending_generation_instruct: Option<String>,
     #[rust]
+    pending_generation_expected_segments: usize,
+    #[rust]
+    pending_generation_received_segments: usize,
+    #[rust]
     has_generated_audio: bool,
 
     // Preview player for reference audio
@@ -8731,6 +8820,8 @@ impl Widget for TTSScreen {
             self.pending_generation_emotion_id = None;
             self.pending_generation_emotion_label = None;
             self.pending_generation_instruct = None;
+            self.pending_generation_expected_segments = 0;
+            self.pending_generation_received_segments = 0;
             self.has_generated_audio = false;
             // Initialize current page — Live Translation is the primary feature
             self.current_page = AppPage::Translation;
@@ -9088,10 +9179,28 @@ impl Widget for TTSScreen {
                         for audio in chunks {
                             self.stored_audio_samples.extend(&audio.samples);
                             self.stored_audio_sample_rate = audio.sample_rate;
+                            if self.tts_status == TTSStatus::Generating
+                                && self.pending_generation_expected_segments > 0
+                            {
+                                self.pending_generation_received_segments += 1;
+                                if self.pending_generation_expected_segments > 1 {
+                                    self.add_log(
+                                        cx,
+                                        &format!(
+                                            "[INFO] [tts] Received audio segment {}/{}",
+                                            self.pending_generation_received_segments,
+                                            self.pending_generation_expected_segments
+                                        ),
+                                    );
+                                }
+                            }
                         }
                         self.rebuild_processed_audio_samples();
                         // Transition to Ready state - user must click Play
-                        if self.tts_status == TTSStatus::Generating {
+                        if self.tts_status == TTSStatus::Generating
+                            && self.pending_generation_received_segments
+                                >= self.pending_generation_expected_segments.max(1)
+                        {
                             let sample_count = self.effective_audio_samples().len();
                             let effective_rate = self.effective_audio_sample_rate();
                             let duration_secs = if effective_rate > 0 {
@@ -12298,36 +12407,7 @@ impl Widget for TTSScreen {
             ))
             .changed(&actions)
         {
-            let mut effective_text = changed_text;
-            if effective_text.chars().count() > TTS_INPUT_MAX_CHARS {
-                let cutoff = effective_text
-                    .char_indices()
-                    .nth(TTS_INPUT_MAX_CHARS)
-                    .map(|(idx, _)| idx)
-                    .unwrap_or(effective_text.len());
-                effective_text.truncate(cutoff);
-                self.view
-                    .text_input(ids!(
-                        content_wrapper
-                            .main_content
-                            .left_column
-                            .content_area
-                            .tts_page
-                            .cards_container
-                            .input_section
-                            .input_container
-                            .text_input
-                    ))
-                    .set_text(cx, &effective_text);
-                self.show_toast(
-                    cx,
-                    self.tr(
-                        "文本已自动截断到 1,000 字符",
-                        "Text was automatically truncated to 1,000 characters",
-                    ),
-                );
-            }
-            self.update_char_count_from_text(cx, &effective_text);
+            self.update_char_count_from_text(cx, &changed_text);
         }
 
         // Handle generate button
@@ -17087,10 +17167,19 @@ impl TTSScreen {
 
     fn update_char_count_from_text(&mut self, cx: &mut Cx, text: &str) {
         let count = text.chars().count();
+        let segment_count = split_tts_text_segments(text, TTS_INPUT_MAX_CHARS)
+            .len()
+            .max(1);
         let label = if self.is_english() {
-            format!("{} / 1,000 characters", count)
+            if segment_count > 1 {
+                format!("{} characters · {} segments", count, segment_count)
+            } else {
+                format!("{} characters", count)
+            }
+        } else if segment_count > 1 {
+            format!("{} 字符 · {} 段", count, segment_count)
         } else {
-            format!("{} / 1,000 字符", count)
+            format!("{} 字符", count)
         };
         self.view
             .label(ids!(
@@ -17221,6 +17310,8 @@ impl TTSScreen {
         self.pending_generation_emotion_id = None;
         self.pending_generation_emotion_label = None;
         self.pending_generation_instruct = None;
+        self.pending_generation_expected_segments = 0;
+        self.pending_generation_received_segments = 0;
     }
 
     fn update_audio_player_visibility(&mut self, cx: &mut Cx) {
@@ -20876,6 +20967,72 @@ impl TTSScreen {
         None
     }
 
+    fn build_tts_prompt_for_segment(
+        &self,
+        voice_id: &str,
+        voice_info: Option<&Voice>,
+        text: &str,
+    ) -> String {
+        if let Some(voice) = voice_info {
+            if voice.source == crate::voice_data::VoiceSource::Trained {
+                if let (
+                    Some(gpt_weights),
+                    Some(sovits_weights),
+                    Some(ref_audio),
+                    Some(prompt_text),
+                ) = (
+                    &voice.gpt_weights,
+                    &voice.sovits_weights,
+                    &voice.reference_audio_path,
+                    &voice.prompt_text,
+                ) {
+                    format!(
+                        "VOICE:TRAINED|{}|{}|{}|{}|{}|{}",
+                        gpt_weights, sovits_weights, ref_audio, prompt_text, voice.language, text
+                    )
+                } else {
+                    format!("VOICE:Doubao|{}", text)
+                }
+            } else if voice.source == crate::voice_data::VoiceSource::Custom {
+                if let (Some(ref_audio), Some(prompt_text)) =
+                    (&voice.reference_audio_path, &voice.prompt_text)
+                {
+                    let ref_audio_path = crate::voice_persistence::get_reference_audio_path(voice)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| ref_audio.clone());
+                    format!(
+                        "VOICE:CUSTOM|{}|{}|{}|{}",
+                        ref_audio_path, prompt_text, voice.language, text
+                    )
+                } else {
+                    format!("VOICE:Doubao|{}", text)
+                }
+            } else if voice.source == crate::voice_data::VoiceSource::BundledIcl {
+                if let Some(ref_filename) = &voice.reference_audio_path {
+                    let ref_audio_path = self
+                        .resolve_bundled_icl_ref_path(&voice.id, ref_filename)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default();
+
+                    if ref_audio_path.is_empty() {
+                        format!("VOICE:vivian|{}", text)
+                    } else {
+                        format!(
+                            "VOICE:CUSTOM|{}|{}|{}|{}",
+                            ref_audio_path, "", voice.language, text
+                        )
+                    }
+                } else {
+                    format!("VOICE:vivian|{}", text)
+                }
+            } else {
+                format!("VOICE:{}|{}", voice_id, text)
+            }
+        } else {
+            format!("VOICE:{}|{}", voice_id, text)
+        }
+    }
+
     fn generate_speech(&mut self, cx: &mut Cx) {
         // Qwen backend currently does not support VOICE:TRAINED prompt format.
         let selected_voice_is_trained = self
@@ -20926,7 +21083,7 @@ impl TTSScreen {
                     .text_input
             ))
             .text();
-        if text.is_empty() {
+        if text.trim().is_empty() {
             self.add_log(
                 cx,
                 "[WARN] [tts] Please enter some text to convert to speech.",
@@ -20934,15 +21091,12 @@ impl TTSScreen {
             return;
         }
 
-        if text.chars().count() > TTS_INPUT_MAX_CHARS {
-            self.show_toast(
+        let text_segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+        if text_segments.is_empty() {
+            self.add_log(
                 cx,
-                self.tr(
-                    "文本超过 1,000 字符限制，请缩短后重试",
-                    "Text exceeds 1,000 character limit, please shorten and try again",
-                ),
+                "[WARN] [tts] Please enter some text to convert to speech.",
             );
-            self.set_generate_button_loading(cx, false);
             return;
         }
         if tts_emotion::instruct_is_over_limit_for_request(
@@ -21093,144 +21247,14 @@ impl TTSScreen {
         self.stored_audio_samples.clear();
         self.processed_audio_samples.clear();
         self.stored_audio_sample_rate = 32000;
+        if let Some(dora) = &self.dora {
+            let _ = dora.shared_dora_state().audio.drain();
+        }
 
         self.tts_status = TTSStatus::Generating;
         self.set_generate_button_loading(cx, true);
         self.apply_voice_to_player_bar(cx, &voice_id, pending_voice_name.as_deref());
         self.update_player_bar(cx);
-
-        // For PrimeSpeech, encode voice selection in prompt using VOICE: prefix
-        // The dora-primespeech node will parse this format
-        // For custom voices, use extended format: VOICE:CUSTOM|<ref_audio_path>|<prompt_text>|<language>|<text>
-        // For trained voices, use: VOICE:TRAINED|<gpt_weights>|<sovits_weights>|<ref_audio>|<prompt_text>|<language>|<text>
-        let prompt = if let Some(voice) = voice_info {
-            if voice.source == crate::voice_data::VoiceSource::Trained {
-                // Trained voice (Pro Mode) - need to send model weights, reference audio, and prompt text
-                if let (
-                    Some(gpt_weights),
-                    Some(sovits_weights),
-                    Some(ref_audio),
-                    Some(prompt_text),
-                ) = (
-                    &voice.gpt_weights,
-                    &voice.sovits_weights,
-                    &voice.reference_audio_path,
-                    &voice.prompt_text,
-                ) {
-                    self.add_log(
-                        cx,
-                        &format!(
-                            "[INFO] [tts] Using trained voice with custom models: {}",
-                            voice.name
-                        ),
-                    );
-                    self.add_log(cx, &format!("[INFO] [tts] GPT: {}", gpt_weights));
-                    self.add_log(cx, &format!("[INFO] [tts] SoVITS: {}", sovits_weights));
-
-                    // VOICE:TRAINED|<gpt_weights>|<sovits_weights>|<ref_audio>|<prompt_text>|<language>|<text>
-                    format!(
-                        "VOICE:TRAINED|{}|{}|{}|{}|{}|{}",
-                        gpt_weights, sovits_weights, ref_audio, prompt_text, voice.language, text
-                    )
-                } else {
-                    self.add_log(
-                        cx,
-                        "[WARN] [tts] Trained voice missing model weights or ref audio, using default",
-                    );
-                    format!("VOICE:Doubao|{}", text)
-                }
-            } else if voice.source == crate::voice_data::VoiceSource::Custom {
-                // Custom voice (Express Mode) - need to send reference audio path and prompt text
-                if let (Some(ref_audio), Some(prompt_text)) =
-                    (&voice.reference_audio_path, &voice.prompt_text)
-                {
-                    // Get absolute path for reference audio
-                    let ref_audio_path = crate::voice_persistence::get_reference_audio_path(&voice)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|| ref_audio.clone());
-
-                    self.add_log(
-                        cx,
-                        &format!("[INFO] [tts] Custom voice ref audio: {}", ref_audio_path),
-                    );
-
-                    // Extended format for custom voices (zero-shot)
-                    // VOICE:CUSTOM|<ref_audio_path>|<prompt_text>|<language>|<text_to_speak>
-                    format!(
-                        "VOICE:CUSTOM|{}|{}|{}|{}",
-                        ref_audio_path, prompt_text, voice.language, text
-                    )
-                } else {
-                    self.add_log(
-                        cx,
-                        "[WARN] [tts] Custom voice missing ref audio or prompt text, using default",
-                    );
-                    format!("VOICE:Doubao|{}", text)
-                }
-            } else if voice.source == crate::voice_data::VoiceSource::BundledIcl {
-                // Bundled ref voice - force x-vector clone path by sending empty prompt_text.
-                if let Some(ref_filename) = &voice.reference_audio_path {
-                    let ref_audio_path = self
-                        .resolve_bundled_icl_ref_path(&voice.id, ref_filename)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default();
-
-                    if ref_audio_path.is_empty() {
-                        self.add_log(
-                            cx,
-                            &format!(
-                            "[WARN] [tts] BundledIcl voice '{}' ref audio not found, using default",
-                            voice.id
-                        ),
-                        );
-                        format!("VOICE:vivian|{}", text)
-                    } else {
-                        self.add_log(
-                            cx,
-                            &format!(
-                                "[INFO] [tts] BundledIcl voice '{}' ref audio (x-vector mode): {}",
-                                voice.id, ref_audio_path
-                            ),
-                        );
-                        format!(
-                            "VOICE:CUSTOM|{}|{}|{}|{}",
-                            ref_audio_path, "", voice.language, text
-                        )
-                    }
-                } else {
-                    format!("VOICE:vivian|{}", text)
-                }
-            } else {
-                // Built-in voice - use simple format
-                format!("VOICE:{}|{}", voice_id, text)
-            }
-        } else {
-            // Voice not found, use default
-            format!("VOICE:{}|{}", voice_id, text)
-        };
-
-        // Debug: log the formatted prompt (use char boundary safe truncation)
-        let prompt_preview = if prompt.chars().count() > 100 {
-            let end: usize = prompt
-                .char_indices()
-                .nth(100)
-                .map(|(i, _)| i)
-                .unwrap_or(prompt.len());
-            format!("{}...", &prompt[..end])
-        } else {
-            prompt.clone()
-        };
-        self.add_log(cx, &format!("[DEBUG] Sending prompt: {}", prompt_preview));
-
-        let payload = serde_json::json!({
-            "prompt": prompt,
-            "speed": self.pending_generation_speed,
-            "pitch": self.pending_generation_pitch,
-            "volume": self.pending_generation_volume,
-            "emotion": self.pending_generation_emotion_id.clone(),
-            "instruct": self.pending_generation_instruct.clone(),
-        });
-        let payload_text = payload.to_string();
 
         self.add_log(
             cx,
@@ -21245,12 +21269,62 @@ impl TTSScreen {
             ),
         );
 
-        // Send prompt payload to dora.
-        let send_result = self
-            .dora
-            .as_ref()
-            .map(|d| d.send_prompt(&payload_text))
-            .unwrap_or(false);
+        let expected_segments = text_segments.len();
+        self.pending_generation_expected_segments = expected_segments;
+        self.pending_generation_received_segments = 0;
+        if expected_segments > 1 {
+            self.add_log(
+                cx,
+                &format!(
+                    "[INFO] [tts] Long text split into {} generation segments",
+                    expected_segments
+                ),
+            );
+        }
+
+        let mut send_result = true;
+        for (idx, segment) in text_segments.iter().enumerate() {
+            let prompt =
+                self.build_tts_prompt_for_segment(&voice_id, voice_info.as_ref(), segment);
+            let prompt_preview = if prompt.chars().count() > 100 {
+                let end: usize = prompt
+                    .char_indices()
+                    .nth(100)
+                    .map(|(i, _)| i)
+                    .unwrap_or(prompt.len());
+                format!("{}...", &prompt[..end])
+            } else {
+                prompt.clone()
+            };
+            self.add_log(
+                cx,
+                &format!(
+                    "[DEBUG] Sending prompt segment {}/{}: {}",
+                    idx + 1,
+                    expected_segments,
+                    prompt_preview
+                ),
+            );
+
+            let payload = serde_json::json!({
+                "prompt": prompt,
+                "speed": self.pending_generation_speed,
+                "pitch": self.pending_generation_pitch,
+                "volume": self.pending_generation_volume,
+                "emotion": self.pending_generation_emotion_id.clone(),
+                "instruct": self.pending_generation_instruct.clone(),
+            });
+            let payload_text = payload.to_string();
+            let sent = self
+                .dora
+                .as_ref()
+                .map(|d| d.send_prompt(&payload_text))
+                .unwrap_or(false);
+            if !sent {
+                send_result = false;
+                break;
+            }
+        }
 
         if send_result {
             self.add_log(cx, "[INFO] [tts] Prompt sent to TTS engine");
@@ -26849,8 +26923,8 @@ mod tests {
     use super::{
         runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
-        tts_input_click_disposition, AppPage, DownloadFormat, RuntimeInitState,
-        TtsInputClickDisposition, TTSScreen,
+        split_tts_text_segments, tts_input_click_disposition, AppPage, DownloadFormat,
+        RuntimeInitState, TtsInputClickDisposition, TTSScreen, TTS_INPUT_MAX_CHARS,
     };
 
     #[test]
@@ -26971,5 +27045,42 @@ mod tests {
             tts_input_click_disposition(false, false, false),
             TtsInputClickDisposition::CollapseSelections
         );
+    }
+
+    #[test]
+    fn long_tts_text_is_split_into_1000_character_segments() {
+        let text = "a".repeat(5_500);
+
+        let segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+
+        assert_eq!(segments.len(), 6);
+        assert!(segments
+            .iter()
+            .all(|segment| segment.chars().count() <= TTS_INPUT_MAX_CHARS));
+        assert_eq!(segments.concat(), text);
+    }
+
+    #[test]
+    fn tts_text_split_prefers_sentence_boundaries_before_limit() {
+        let first_sentence = format!("{}.", "a".repeat(800));
+        let second_sentence = "b".repeat(500);
+        let text = format!("{} {}", first_sentence, second_sentence);
+
+        let segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+
+        assert_eq!(segments, vec![first_sentence, second_sentence]);
+    }
+
+    #[test]
+    fn tts_text_split_preserves_multibyte_text_order() {
+        let text = format!("{}。{}", "你好".repeat(450), "世界".repeat(150));
+
+        let segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+
+        assert_eq!(segments.len(), 2);
+        assert!(segments
+            .iter()
+            .all(|segment| segment.chars().count() <= TTS_INPUT_MAX_CHARS));
+        assert_eq!(segments.concat(), text);
     }
 }
