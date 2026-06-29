@@ -16,7 +16,7 @@ use mlx_rs::{
 
 use crate::config::{CodePredictorConfig, QuantizationConfig, TalkerConfig};
 use crate::error::{Error, Result};
-use crate::sampling::sample_logits;
+use crate::sampling::{sample_logits, SamplingKey};
 use mlx_rs_core::cache::{KVCache, KeyValueCache};
 use mlx_rs_core::utils::{scaled_dot_product_attention, SdpaMask};
 
@@ -284,6 +284,24 @@ pub struct CodePredictor {
     pub mtp_proj_bias: Option<Array>,
 }
 
+fn sample_subtalker_token(
+    logits: &Array,
+    temperature: f32,
+    top_k: i32,
+    top_p: f32,
+    rng_key: Option<&mut SamplingKey>,
+) -> Result<u32> {
+    Ok(sample_logits(
+        logits,
+        temperature,
+        top_k,
+        top_p,
+        1.0,
+        &[],
+        rng_key,
+    )?)
+}
+
 impl CodePredictor {
     /// Generate codebooks 1-15 autoregressively for one time step.
     /// Takes the talker's last hidden state and the codebook-0 embedding (both in talker dim).
@@ -295,6 +313,7 @@ impl CodePredictor {
         temperature: f32,
         top_k: i32,
         top_p: f32,
+        mut rng_key: Option<&mut SamplingKey>,
     ) -> Result<Vec<u32>> {
         let mut codes = Vec::with_capacity(15);
 
@@ -328,7 +347,13 @@ impl CodePredictor {
         let last_normed = normed.index((.., -1.., ..)); // [B, 1, 1024]
         let logits = self.lm_heads[0].forward(&last_normed)?;
         eval([&logits])?;
-        let token = sample_logits(&logits, temperature, top_k, top_p, 1.0, &[], None)?;
+        let token = sample_subtalker_token(
+            &logits,
+            temperature,
+            top_k,
+            top_p,
+            rng_key.as_mut().map(|key| &mut **key),
+        )?;
         codes.push(token);
 
         // Autoregressive for codebooks 2-15
@@ -349,8 +374,13 @@ impl CodePredictor {
             let normed = self.norm.forward(&current_input)?;
             let logits = self.lm_heads[g].forward(&normed)?;
             eval([&logits])?;
-            // Greedy decoding (argmax) for code predictor
-            let token = sample_logits(&logits, temperature, top_k, top_p, 1.0, &[], None)?;
+            let token = sample_subtalker_token(
+                &logits,
+                temperature,
+                top_k,
+                top_p,
+                rng_key.as_mut().map(|key| &mut **key),
+            )?;
             codes.push(token);
         }
 
@@ -1297,5 +1327,25 @@ pub fn load_all_weights(model_dir: &Path) -> Result<HashMap<String, Array>> {
     } else {
         let path = model_dir.join("model.safetensors");
         Ok(Array::load_safetensors(&path)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sampling::SamplingKey;
+
+    #[test]
+    fn subtalker_sampling_repeats_with_the_same_seed() {
+        let logits = Array::from_slice(&[0.0f32, 0.25, 0.5, 0.75], &[4]);
+
+        let sample_sequence = |seed| {
+            let mut key = SamplingKey::new(seed).unwrap();
+            (0..16)
+                .map(|_| sample_subtalker_token(&logits, 1.0, 0, 1.0, Some(&mut key)).unwrap())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(sample_sequence(4242), sample_sequence(4242));
     }
 }

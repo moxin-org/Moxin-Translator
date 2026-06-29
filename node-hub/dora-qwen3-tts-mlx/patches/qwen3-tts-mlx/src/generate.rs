@@ -371,6 +371,7 @@ pub fn generate(
             sub_temp,
             sub_top_k,
             sub_top_p,
+            rng_key.as_mut(),
         )?;
 
         // Build full 16-code frame
@@ -509,6 +510,7 @@ pub fn generate_custom_voice(
             sub_temp,
             sub_top_k,
             sub_top_p,
+            rng_key.as_mut(),
         )?;
 
         let mut frame = [pad_id; 16];
@@ -652,6 +654,7 @@ pub fn generate_voice_design(
             sub_temp,
             sub_top_k,
             sub_top_p,
+            rng_key.as_mut(),
         )?;
 
         let mut frame = [pad_id; 16];
@@ -796,6 +799,7 @@ pub fn generate_voice_clone(
             sub_temp,
             sub_top_k,
             sub_top_p,
+            rng_key.as_mut(),
         )?;
 
         let mut frame = [pad_id; 16];
@@ -964,6 +968,7 @@ pub fn generate_voice_clone_icl(
             sub_temp,
             sub_top_k,
             sub_top_p,
+            rng_key.as_mut(),
         )?;
 
         let mut frame = [pad_id; 16];
@@ -1174,6 +1179,7 @@ impl GenerationState {
                 sub_temp,
                 sub_top_k,
                 sub_top_p,
+                self.rng_key.as_mut(),
             )?;
 
             let mut frame = [self.pad_id; 16];
