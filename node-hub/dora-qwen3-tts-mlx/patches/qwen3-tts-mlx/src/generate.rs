@@ -19,7 +19,10 @@ use tracing::info;
 
 use crate::config::{GenerationConfig, Qwen3TtsConfig, TalkerConfig};
 use crate::error::Result;
-use crate::sampling::{build_eos_suppression_mask, build_suppression_mask, sample_logits_with_mask, RepetitionPenaltyMask, SamplingKey};
+use crate::sampling::{
+    build_eos_suppression_mask, build_suppression_mask, sample_logits_with_mask,
+    RepetitionPenaltyMask, SamplingKey,
+};
 use crate::talker::Talker;
 
 /// Interpolate text embeddings for speed control (GPT-SoVITS-style).
@@ -104,17 +107,13 @@ pub fn build_codec_prefix(
 ) -> Result<Vec<u32>> {
     let lang_id = resolve_language_id(talker_config, language)?;
 
-    let spk_id = talker_config
-        .spk_id
-        .get(speaker)
-        .copied()
-        .ok_or_else(|| {
-            crate::error::Error::Config(format!(
-                "Unknown speaker '{}'. Available: {:?}",
-                speaker,
-                talker_config.spk_id.keys().collect::<Vec<_>>()
-            ))
-        })?;
+    let spk_id = talker_config.spk_id.get(speaker).copied().ok_or_else(|| {
+        crate::error::Error::Config(format!(
+            "Unknown speaker '{}'. Available: {:?}",
+            speaker,
+            talker_config.spk_id.keys().collect::<Vec<_>>()
+        ))
+    })?;
 
     Ok(vec![
         talker_config.codec_think_id,
@@ -145,9 +144,9 @@ pub fn build_codec_prefix_voice_design(
 /// This matches the Python's `language="auto"` path used for voice cloning.
 pub fn build_codec_prefix_nothink(talker_config: &TalkerConfig) -> Vec<u32> {
     vec![
-        talker_config.codec_nothink_id,    // 2155
-        talker_config.codec_think_bos_id,  // 2156
-        talker_config.codec_think_eos_id,  // 2157
+        talker_config.codec_nothink_id,   // 2155
+        talker_config.codec_think_bos_id, // 2156
+        talker_config.codec_think_eos_id, // 2157
     ]
 }
 
@@ -163,6 +162,45 @@ fn resolve_language_id(talker_config: &TalkerConfig, language: &str) -> Result<u
                 talker_config.codec_language_id.keys().collect::<Vec<_>>()
             ))
         })
+}
+
+/// Extract target text ids from official assistant ChatML ids and append TTS EOS.
+///
+/// The Python wrapper builds:
+/// `<|im_start|>assistant\n{text}<|im_end|>\n<|im_start|>assistant\n`
+/// and the model consumes `input_ids[:, 3:-5]` as the target text block in
+/// non-streaming mode.
+pub fn assistant_target_ids_with_eos(
+    assistant_input_ids: &[u32],
+    tts_eos_token_id: u32,
+) -> Vec<u32> {
+    let mut target = if assistant_input_ids.len() > 8 {
+        assistant_input_ids[3..assistant_input_ids.len() - 5].to_vec()
+    } else {
+        Vec::new()
+    };
+    target.push(tts_eos_token_id);
+    target
+}
+
+fn sampling_temperature(gen_config: &GenerationConfig) -> f32 {
+    if gen_config.do_sample {
+        gen_config.temperature
+    } else {
+        0.0
+    }
+}
+
+fn subtalker_sampling_params(gen_config: &GenerationConfig) -> (f32, i32, f32) {
+    if gen_config.subtalker_dosample {
+        (
+            gen_config.subtalker_temperature,
+            gen_config.subtalker_top_k,
+            gen_config.subtalker_top_p,
+        )
+    } else {
+        (0.0, 0, 1.0)
+    }
 }
 
 /// Run the full generation loop (streaming text, batched prefill).
@@ -192,9 +230,7 @@ pub fn generate(
     let bos_id = tts_config.talker_config.codec_bos_id;
 
     // Initialize seeded PRNG if seed is provided
-    let mut rng_key = seed
-        .map(|s| SamplingKey::new(s))
-        .transpose()?;
+    let mut rng_key = seed.map(|s| SamplingKey::new(s)).transpose()?;
 
     // ====================================================================
     // Build prefill: 10 positions
@@ -291,6 +327,8 @@ pub fn generate(
 
     // GPU-resident repetition penalty mask (no CPU roundtrip per step)
     let mut penalty_mask = RepetitionPenaltyMask::new(vocab_size, gen_config.repetition_penalty)?;
+    let temperature = sampling_temperature(gen_config);
+    let (sub_temp, sub_top_k, sub_top_p) = subtalker_sampling_params(gen_config);
 
     for step in 0..gen_config.max_new_tokens as usize {
         // Use combined mask (suppress control tokens + EOS) before min_new_tokens,
@@ -304,7 +342,7 @@ pub fn generate(
         // Sample codebook-0 from current logits (GPU penalty mask, no CPU token list)
         let token0 = sample_logits_with_mask(
             &logits,
-            gen_config.temperature,
+            temperature,
             gen_config.top_k,
             gen_config.top_p,
             gen_config.repetition_penalty,
@@ -327,9 +365,13 @@ pub fn generate(
         let hidden_slice = hidden.index((.., -1.., ..));
         let code0_arr = Array::from_slice(&[token0 as i32], &[1, 1]);
         let code0_embed = talker.codec_embedding.forward(&code0_arr)?;
-        let sub_codes = talker
-            .code_predictor
-            .generate_codes(&hidden_slice, &code0_embed)?;
+        let sub_codes = talker.code_predictor.generate_codes(
+            &hidden_slice,
+            &code0_embed,
+            sub_temp,
+            sub_top_k,
+            sub_top_p,
+        )?;
 
         // Build full 16-code frame
         let mut frame = [pad_id; 16];
@@ -360,6 +402,138 @@ pub fn generate(
 
     let gen_time = gen_start.elapsed();
     info!("Generation complete: {} frames", all_codes.len());
+
+    let timing = GenerationTiming {
+        prefill_ms: prefill_time.as_secs_f64() * 1000.0,
+        generation_ms: gen_time.as_secs_f64() * 1000.0,
+        generation_frames: all_codes.len(),
+    };
+
+    Ok((all_codes, timing))
+}
+
+/// Generate speech using the official CustomVoice non-streaming layout.
+///
+/// This mirrors the Python `generate_custom_voice(..., instruct=...)` wrapper:
+/// assistant ChatML input ids are passed separately from optional user ChatML
+/// instruct ids, and the full target text block is included in prefill before
+/// autoregressive codec generation starts.
+pub fn generate_custom_voice(
+    talker: &mut Talker,
+    assistant_input_ids: &[u32],
+    instruct_token_ids: &[u32],
+    codec_prefix: &[u32],
+    gen_config: &GenerationConfig,
+    tts_config: &Qwen3TtsConfig,
+    seed: Option<u64>,
+) -> Result<(Vec<[u32; 16]>, GenerationTiming)> {
+    let eos_token = tts_config.talker_config.codec_eos_token_id;
+    let pad_id = tts_config.talker_config.codec_pad_id;
+
+    let mut rng_key = seed.map(|s| SamplingKey::new(s)).transpose()?;
+
+    let target_text_ids =
+        assistant_target_ids_with_eos(assistant_input_ids, tts_config.tts_eos_token_id);
+
+    info!(
+        "CustomVoice official prefill: {} assistant tokens, {} target text tokens incl eos, {} instruct tokens, max {} new tokens",
+        assistant_input_ids.len(),
+        target_text_ids.len(),
+        instruct_token_ids.len(),
+        gen_config.max_new_tokens
+    );
+
+    talker.reset_caches();
+
+    let prefill_start = Instant::now();
+
+    let input_embed = talker.build_custom_voice_prefill_embedding(
+        instruct_token_ids,
+        assistant_input_ids,
+        codec_prefix,
+        tts_config,
+    )?;
+
+    let (prefill_logits, prefill_hidden) = talker.forward_step(&input_embed)?;
+    let mut logits = prefill_logits.index((.., -1.., ..));
+    let mut hidden = prefill_hidden.index((.., -1.., ..));
+    eval([&logits, &hidden])?;
+    let prefill_time = prefill_start.elapsed();
+
+    let tts_pad_embed = talker.build_text_only_embedding(tts_config.tts_pad_token_id)?;
+
+    let gen_start = Instant::now();
+    let mut all_codes: Vec<[u32; 16]> = Vec::new();
+
+    let min_new_tokens: usize = 2;
+    let vocab_size = tts_config.talker_config.vocab_size as usize;
+    let suppress_mask = build_suppression_mask(vocab_size, eos_token);
+    let eos_suppress_mask = build_eos_suppression_mask(vocab_size, eos_token);
+    let combined_mask = suppress_mask.add(&eos_suppress_mask)?;
+    let mut penalty_mask = RepetitionPenaltyMask::new(vocab_size, gen_config.repetition_penalty)?;
+    let temperature = sampling_temperature(gen_config);
+    let (sub_temp, sub_top_k, sub_top_p) = subtalker_sampling_params(gen_config);
+
+    for step in 0..gen_config.max_new_tokens as usize {
+        let mask = if step < min_new_tokens {
+            &combined_mask
+        } else {
+            &suppress_mask
+        };
+
+        let token0 = sample_logits_with_mask(
+            &logits,
+            temperature,
+            gen_config.top_k,
+            gen_config.top_p,
+            gen_config.repetition_penalty,
+            &[],
+            rng_key.as_mut(),
+            Some(mask),
+            Some(&penalty_mask),
+        )?;
+
+        if token0 == eos_token {
+            info!("EOS at step {}", step);
+            break;
+        }
+
+        penalty_mask.record_token(token0)?;
+
+        let hidden_slice = hidden.index((.., -1.., ..));
+        let code0_arr = Array::from_slice(&[token0 as i32], &[1, 1]);
+        let code0_embed = talker.codec_embedding.forward(&code0_arr)?;
+        let sub_codes = talker.code_predictor.generate_codes(
+            &hidden_slice,
+            &code0_embed,
+            sub_temp,
+            sub_top_k,
+            sub_top_p,
+        )?;
+
+        let mut frame = [pad_id; 16];
+        frame[0] = token0;
+        for (g, &code) in sub_codes.iter().enumerate() {
+            frame[g + 1] = code;
+        }
+        all_codes.push(frame);
+
+        let input_embed = talker.build_generation_embedding_with_text(&frame, &tts_pad_embed)?;
+        let result = talker.forward_step(&input_embed)?;
+        logits = result.0;
+        hidden = result.1;
+        eval([&logits])?;
+
+        if step > 0 && step % 256 == 0 {
+            unsafe { mlx_sys::mlx_clear_cache() };
+        }
+    }
+
+    let gen_time = gen_start.elapsed();
+    info!(
+        "CustomVoice generation complete: {} frames",
+        all_codes.len()
+    );
 
     let timing = GenerationTiming {
         prefill_ms: prefill_time.as_secs_f64() * 1000.0,
@@ -440,6 +614,8 @@ pub fn generate_voice_design(
     let eos_suppress_mask = build_eos_suppression_mask(vocab_size, eos_token);
     let combined_mask = suppress_mask.add(&eos_suppress_mask)?;
     let mut penalty_mask = RepetitionPenaltyMask::new(vocab_size, gen_config.repetition_penalty)?;
+    let temperature = sampling_temperature(gen_config);
+    let (sub_temp, sub_top_k, sub_top_p) = subtalker_sampling_params(gen_config);
 
     for step in 0..gen_config.max_new_tokens as usize {
         let mask = if step < min_new_tokens {
@@ -450,7 +626,7 @@ pub fn generate_voice_design(
 
         let token0 = sample_logits_with_mask(
             &logits,
-            gen_config.temperature,
+            temperature,
             gen_config.top_k,
             gen_config.top_p,
             gen_config.repetition_penalty,
@@ -470,9 +646,13 @@ pub fn generate_voice_design(
         let hidden_slice = hidden.index((.., -1.., ..));
         let code0_arr = Array::from_slice(&[token0 as i32], &[1, 1]);
         let code0_embed = talker.codec_embedding.forward(&code0_arr)?;
-        let sub_codes = talker
-            .code_predictor
-            .generate_codes(&hidden_slice, &code0_embed)?;
+        let sub_codes = talker.code_predictor.generate_codes(
+            &hidden_slice,
+            &code0_embed,
+            sub_temp,
+            sub_top_k,
+            sub_top_p,
+        )?;
 
         let mut frame = [pad_id; 16];
         frame[0] = token0;
@@ -500,7 +680,10 @@ pub fn generate_voice_design(
     }
 
     let gen_time = gen_start.elapsed();
-    info!("VoiceDesign generation complete: {} frames", all_codes.len());
+    info!(
+        "VoiceDesign generation complete: {} frames",
+        all_codes.len()
+    );
 
     let timing = GenerationTiming {
         prefill_ms: prefill_time.as_secs_f64() * 1000.0,
@@ -519,8 +702,8 @@ pub fn generate_voice_design(
 pub fn generate_voice_clone(
     talker: &mut Talker,
     text_token_ids: &[u32],
-    codec_prefix: &[u32],       // [think, think_bos, lang, think_eos] — 4 tokens
-    speaker_embedding: &Array,   // [1, enc_dim] from ECAPA-TDNN
+    codec_prefix: &[u32],      // [think, think_bos, lang, think_eos] — 4 tokens
+    speaker_embedding: &Array, // [1, enc_dim] from ECAPA-TDNN
     gen_config: &GenerationConfig,
     tts_config: &Qwen3TtsConfig,
     seed: Option<u64>,
@@ -575,6 +758,8 @@ pub fn generate_voice_clone(
     let eos_suppress_mask = build_eos_suppression_mask(vocab_size, eos_token);
     let combined_mask = suppress_mask.add(&eos_suppress_mask)?;
     let mut penalty_mask = RepetitionPenaltyMask::new(vocab_size, gen_config.repetition_penalty)?;
+    let temperature = sampling_temperature(gen_config);
+    let (sub_temp, sub_top_k, sub_top_p) = subtalker_sampling_params(gen_config);
 
     for step in 0..gen_config.max_new_tokens as usize {
         let mask = if step < min_new_tokens {
@@ -585,7 +770,7 @@ pub fn generate_voice_clone(
 
         let token0 = sample_logits_with_mask(
             &logits,
-            gen_config.temperature,
+            temperature,
             gen_config.top_k,
             gen_config.top_p,
             gen_config.repetition_penalty,
@@ -605,9 +790,13 @@ pub fn generate_voice_clone(
         let hidden_slice = hidden.index((.., -1.., ..));
         let code0_arr = Array::from_slice(&[token0 as i32], &[1, 1]);
         let code0_embed = talker.codec_embedding.forward(&code0_arr)?;
-        let sub_codes = talker
-            .code_predictor
-            .generate_codes(&hidden_slice, &code0_embed)?;
+        let sub_codes = talker.code_predictor.generate_codes(
+            &hidden_slice,
+            &code0_embed,
+            sub_temp,
+            sub_top_k,
+            sub_top_p,
+        )?;
 
         let mut frame = [pad_id; 16];
         frame[0] = token0;
@@ -660,10 +849,10 @@ pub fn generate_voice_clone(
 pub fn generate_voice_clone_icl(
     talker: &mut Talker,
     text_token_ids: &[u32],
-    ref_text_ids: &[u32],         // tokenized reference text
-    ref_codes: &[[u32; 16]],      // reference audio codec frames from Mimi encoder
-    codec_prefix: &[u32],          // [think, think_bos, lang, think_eos]
-    speaker_embedding: &Array,     // [1, enc_dim] from ECAPA-TDNN
+    ref_text_ids: &[u32],      // tokenized reference text
+    ref_codes: &[[u32; 16]],   // reference audio codec frames from Mimi encoder
+    codec_prefix: &[u32],      // [think, think_bos, lang, think_eos]
+    speaker_embedding: &Array, // [1, enc_dim] from ECAPA-TDNN
     gen_config: &GenerationConfig,
     tts_config: &Qwen3TtsConfig,
     seed: Option<u64>,
@@ -690,18 +879,15 @@ pub fn generate_voice_clone_icl(
     let prefill_start = Instant::now();
 
     // Phase 1: prefill (no first_text+bos in ICL mode)
-    let prefill_embed = talker.build_icl_prefill_embedding(
-        codec_prefix,
-        speaker_embedding,
-        tts_config,
-    )?;
+    let prefill_embed =
+        talker.build_icl_prefill_embedding(codec_prefix, speaker_embedding, tts_config)?;
     let prefill_len = prefill_embed.dim(1);
     let (_, _) = talker.forward_step(&prefill_embed)?;
     eval(std::iter::empty::<&Array>())?;
 
     // Phase 2: ICL extension — sum reference codec embeddings and build ICL prompt
     let ref_codec_embed = talker.sum_ref_codec_embeddings(ref_codes)?; // [1, T_ref, hidden]
-    // Default: streaming mode (non_streaming_mode=false) matching Python reference
+                                                                       // Default: streaming mode (non_streaming_mode=false) matching Python reference
     let (icl_embed, trailing_text_embed, trailing_len) = talker.build_icl_prompt(
         ref_text_ids,
         text_token_ids,
@@ -740,6 +926,8 @@ pub fn generate_voice_clone_icl(
     let eos_suppress_mask = build_eos_suppression_mask(vocab_size, eos_token);
     let combined_mask = suppress_mask.add(&eos_suppress_mask)?;
     let mut penalty_mask = RepetitionPenaltyMask::new(vocab_size, repetition_penalty)?;
+    let temperature = sampling_temperature(gen_config);
+    let (sub_temp, sub_top_k, sub_top_p) = subtalker_sampling_params(gen_config);
 
     for step in 0..max_new_tokens {
         let mask = if step < min_new_tokens {
@@ -750,7 +938,7 @@ pub fn generate_voice_clone_icl(
 
         let token0 = sample_logits_with_mask(
             &logits,
-            gen_config.temperature,
+            temperature,
             gen_config.top_k,
             gen_config.top_p,
             repetition_penalty,
@@ -770,9 +958,13 @@ pub fn generate_voice_clone_icl(
         let hidden_slice = hidden.index((.., -1.., ..));
         let code0_arr = Array::from_slice(&[token0 as i32], &[1, 1]);
         let code0_embed = talker.codec_embedding.forward(&code0_arr)?;
-        let sub_codes = talker
-            .code_predictor
-            .generate_codes(&hidden_slice, &code0_embed)?;
+        let sub_codes = talker.code_predictor.generate_codes(
+            &hidden_slice,
+            &code0_embed,
+            sub_temp,
+            sub_top_k,
+            sub_top_p,
+        )?;
 
         let mut frame = [pad_id; 16];
         frame[0] = token0;
@@ -802,7 +994,10 @@ pub fn generate_voice_clone_icl(
     }
 
     let gen_time = gen_start.elapsed();
-    info!("VoiceClone ICL generation complete: {} frames", all_codes.len());
+    info!(
+        "VoiceClone ICL generation complete: {} frames",
+        all_codes.len()
+    );
 
     let timing = GenerationTiming {
         prefill_ms: prefill_time.as_secs_f64() * 1000.0,
@@ -950,7 +1145,7 @@ impl GenerationState {
 
             let token0 = sample_logits_with_mask(
                 &self.logits,
-                self.gen_config.temperature,
+                sampling_temperature(&self.gen_config),
                 self.gen_config.top_k,
                 self.gen_config.top_p,
                 self.gen_config.repetition_penalty,
@@ -972,9 +1167,14 @@ impl GenerationState {
             let hidden_slice = self.hidden.index((.., -1.., ..));
             let code0_arr = Array::from_slice(&[token0 as i32], &[1, 1]);
             let code0_embed = talker.codec_embedding.forward(&code0_arr)?;
-            let sub_codes = talker
-                .code_predictor
-                .generate_codes(&hidden_slice, &code0_embed)?;
+            let (sub_temp, sub_top_k, sub_top_p) = subtalker_sampling_params(&self.gen_config);
+            let sub_codes = talker.code_predictor.generate_codes(
+                &hidden_slice,
+                &code0_embed,
+                sub_temp,
+                sub_top_k,
+                sub_top_p,
+            )?;
 
             let mut frame = [self.pad_id; 16];
             frame[0] = token0;
@@ -1019,5 +1219,26 @@ impl GenerationState {
     /// Total frames generated so far.
     pub fn total_frames(&self) -> usize {
         self.step
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn assistant_target_ids_with_eos_matches_official_slice() {
+        let assistant_ids = vec![101, 102, 198, 11, 12, 13, 151645, 198, 151644, 102, 198];
+
+        let target = assistant_target_ids_with_eos(&assistant_ids, 999);
+
+        assert_eq!(target, vec![11, 12, 13, 999]);
+    }
+
+    #[test]
+    fn assistant_target_ids_with_eos_handles_short_input() {
+        let target = assistant_target_ids_with_eos(&[1, 2, 3], 999);
+
+        assert_eq!(target, vec![999]);
     }
 }

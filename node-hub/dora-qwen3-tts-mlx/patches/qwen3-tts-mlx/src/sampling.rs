@@ -209,7 +209,7 @@ fn apply_top_k(logits: &Array, k: i32) -> Result<Array, Exception> {
     // Find threshold: k-th largest value
     let mut sorted = logits_vec.clone();
     sorted.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-    let threshold = sorted[k as usize];
+    let threshold = sorted[k as usize - 1];
 
     // Mask out values below threshold
     let masked: Vec<f32> = logits_vec
@@ -266,4 +266,23 @@ fn apply_top_p(logits: &Array, p: f32) -> Result<Array, Exception> {
         .map(|(i, &v)| if keep[i] { v } else { f32::NEG_INFINITY })
         .collect();
     Ok(Array::from_slice(&masked, &[vocab_size as i32]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn top_k_keeps_exactly_k_highest_logits() {
+        let logits = Array::from_slice(&[4.0f32, 3.0, 2.0, 1.0], &[4]);
+
+        let filtered = apply_top_k(&logits, 2).unwrap();
+        mlx_rs::transforms::eval(std::iter::once(&filtered)).unwrap();
+        let values = filtered.as_slice::<f32>();
+
+        assert_eq!(values[0], 4.0);
+        assert_eq!(values[1], 3.0);
+        assert!(values[2].is_infinite() && values[2].is_sign_negative());
+        assert!(values[3].is_infinite() && values[3].is_sign_negative());
+    }
 }

@@ -312,7 +312,7 @@ impl Default for GenerationConfig {
             top_k: 50,
             top_p: 1.0,
             repetition_penalty: 1.05,
-            max_new_tokens: 8192,
+            max_new_tokens: 2048,
             speed_factor: 1.0,
             subtalker_dosample: true,
             subtalker_temperature: 0.9,
@@ -327,5 +327,5 @@ fn default_temp() -> f32 { 0.9 }
 fn default_top_k() -> i32 { 50 }
 fn default_top_p() -> f32 { 1.0 }
 fn default_rep_penalty() -> f32 { 1.05 }
-fn default_max_tokens() -> i32 { 8192 }
+fn default_max_tokens() -> i32 { 2048 }
 fn default_speed() -> f32 { 1.0 }

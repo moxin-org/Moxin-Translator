@@ -28,6 +28,12 @@ pub struct TtsHistoryEntry {
     pub speed: f64,
     pub pitch: f64,
     pub volume: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emotion_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub emotion_label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instruct: Option<String>,
     pub audio_file: String,
 }
 
@@ -124,4 +130,58 @@ pub fn delete_audio_file(audio_file: &str) -> Result<(), String> {
         return Ok(());
     }
     fs::remove_file(&path).map_err(|e| format!("Failed to remove history audio {:?}: {}", path, e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn legacy_history_json() -> &'static str {
+        r#"{
+            "version": "1.0",
+            "entries": [{
+                "id": "gen-1",
+                "created_at": 1,
+                "text": "hello",
+                "text_preview": "hello",
+                "voice_id": "vivian",
+                "voice_name": "Vivian",
+                "model_id": "qwen3",
+                "model_name": "Qwen3",
+                "duration_secs": 1.0,
+                "sample_rate": 24000,
+                "sample_count": 24000,
+                "speed": 1.0,
+                "pitch": 0.0,
+                "volume": 100.0,
+                "audio_file": "gen-1.wav"
+            }]
+        }"#
+    }
+
+    #[test]
+    fn legacy_history_without_emotion_fields_deserializes() {
+        let config: TtsHistoryConfig = serde_json::from_str(legacy_history_json()).unwrap();
+
+        let entry = &config.entries[0];
+        assert_eq!(entry.emotion_id, None);
+        assert_eq!(entry.emotion_label, None);
+        assert_eq!(entry.instruct, None);
+    }
+
+    #[test]
+    fn history_entry_deserializes_native_instruct_metadata() {
+        let mut value: serde_json::Value = serde_json::from_str(legacy_history_json()).unwrap();
+        let entry = &mut value["entries"][0];
+        entry["emotion_id"] = serde_json::json!("happy");
+        entry["emotion_label"] = serde_json::json!("开心");
+        entry["instruct"] = serde_json::json!("用开心、轻快的语气说");
+
+        let config: TtsHistoryConfig = serde_json::from_value(value).unwrap();
+
+        let entry = &config.entries[0];
+        assert_eq!(entry.emotion_id.as_deref(), Some("happy"));
+        assert_eq!(entry.emotion_label.as_deref(), Some("开心"));
+        assert_eq!(entry.instruct.as_deref(), Some("用开心、轻快的语气说"));
+    }
 }

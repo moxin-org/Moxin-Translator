@@ -70,6 +70,13 @@ struct Args {
     reference_text: Option<String>,
 }
 
+fn should_use_voice_design_route(
+    model_supports_voice_design: bool,
+    instruct: Option<&str>,
+) -> bool {
+    model_supports_voice_design && instruct.is_some()
+}
+
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -96,6 +103,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let opts = SynthesizeOptions {
         speaker: &args.speaker,
         language: &args.language,
+        instruct: args.instruct.as_deref(),
         temperature: args.temperature,
         top_k: args.top_k,
         top_p: args.top_p,
@@ -163,7 +171,9 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let samples = normalize_audio(&samples, 0.95);
         save_wav(&samples, synth.sample_rate, &args.output)?;
         eprintln!("Saved to {}", args.output);
-    } else if let Some(ref instruct) = args.instruct {
+    } else if should_use_voice_design_route(synth.supports_voice_design(), args.instruct.as_deref())
+    {
+        let instruct = args.instruct.as_deref().unwrap();
         // VoiceDesign mode
         eprintln!("VoiceDesign mode: \"{}\"", instruct);
         let (samples, timing) = synth.synthesize_voice_design_with_timing(
@@ -268,4 +278,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn custom_voice_instruct_stays_on_custom_voice_route() {
+        assert!(!should_use_voice_design_route(
+            false,
+            Some("用特别愤怒的语气说")
+        ));
+        assert!(should_use_voice_design_route(
+            true,
+            Some("用特别愤怒的语气说")
+        ));
+    }
 }
