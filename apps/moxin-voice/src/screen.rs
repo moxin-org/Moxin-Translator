@@ -1873,9 +1873,9 @@ live_design! {
 
                             emotion_row = <View> {
                                 width: Fill, height: Fit
-                                flow: Right
-                                align: {y: 0.5}
-                                spacing: 8
+                                flow: Down
+                                align: {x: 0.0}
+                                spacing: 6
 
                                 emotion_label = <Label> {
                                     width: Fit, height: Fit
@@ -1891,7 +1891,7 @@ live_design! {
 
                                 emotion_options = <View> {
                                     width: Fill, height: Fit
-                                    flow: Right
+                                    flow: Right { wrap: true }
                                     align: {y: 0.5}
                                     spacing: 4
 
@@ -1985,6 +1985,22 @@ live_design! {
                                             text_style: { font_size: 12.0, line_spacing: 1.4 }
                                             fn get_color(self) -> vec4 {
                                                 return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        draw_cursor: {
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 0.5);
+                                                sdf.fill((MOXIN_PRIMARY));
+                                                return sdf.result;
+                                            }
+                                        }
+                                        draw_selection: {
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 1.0);
+                                                sdf.fill(vec4(0.39, 0.40, 0.95, 0.2));
+                                                return sdf.result;
                                             }
                                         }
                                     }
