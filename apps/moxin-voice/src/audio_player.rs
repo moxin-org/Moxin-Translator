@@ -43,6 +43,8 @@ impl CircularAudioBuffer {
     }
 
     fn write(&mut self, samples: &[f32]) -> usize {
+        self.ensure_capacity(self.available_samples.saturating_add(samples.len()));
+
         let mut written = 0;
         let mut dropped_in_write = 0;
 
@@ -74,6 +76,29 @@ impl CircularAudioBuffer {
         }
 
         written
+    }
+
+    fn ensure_capacity(&mut self, required_available: usize) {
+        if required_available <= self.buffer_size {
+            return;
+        }
+
+        let new_size = required_available
+            .checked_next_power_of_two()
+            .unwrap_or(required_available);
+        let mut new_buffer = vec![0.0; new_size];
+        for (idx, slot) in new_buffer
+            .iter_mut()
+            .enumerate()
+            .take(self.available_samples)
+        {
+            *slot = self.sample_at_offset(idx).unwrap_or(0.0);
+        }
+
+        self.buffer = new_buffer;
+        self.buffer_size = new_size;
+        self.read_pos = 0;
+        self.write_pos = self.available_samples % self.buffer_size;
     }
 
     fn sample_at_offset(&self, offset: usize) -> Option<f32> {
@@ -531,5 +556,18 @@ mod tests {
         };
 
         assert!(first_after_boundary > 278.62 && first_after_boundary < 278.66);
+    }
+
+    #[test]
+    fn circular_buffer_grows_for_long_writes_without_dropping_start() {
+        let mut buffer = CircularAudioBuffer::new(1.0, 10);
+        let source: Vec<f32> = (0..25).map(|n| n as f32).collect();
+
+        buffer.write(&source);
+
+        assert_eq!(buffer.dropped_samples, 0);
+        assert_eq!(buffer.available_samples, source.len());
+        assert_eq!(buffer.sample_at_offset(0), Some(0.0));
+        assert_eq!(buffer.sample_at_offset(24), Some(24.0));
     }
 }

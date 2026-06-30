@@ -318,6 +318,134 @@ fn get_project_tts_models() -> Vec<TtsModelOption> {
 
 const TTS_INPUT_MAX_CHARS: usize = 1000;
 
+#[derive(Clone, Debug, Default)]
+struct TtsSegmentDispatch {
+    segments: Vec<String>,
+    next_to_send: usize,
+    received: usize,
+}
+
+impl TtsSegmentDispatch {
+    fn new(segments: Vec<String>) -> Self {
+        Self {
+            segments,
+            next_to_send: 0,
+            received: 0,
+        }
+    }
+
+    fn take_next(&mut self) -> Option<(usize, usize, String)> {
+        if self.next_to_send != self.received || self.next_to_send >= self.segments.len() {
+            return None;
+        }
+
+        let index = self.next_to_send;
+        self.next_to_send += 1;
+        Some((index + 1, self.segments.len(), self.segments[index].clone()))
+    }
+
+    fn mark_received(&mut self) {
+        if self.received < self.next_to_send {
+            self.received += 1;
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        !self.segments.is_empty() && self.received >= self.segments.len()
+    }
+
+    fn clear(&mut self) {
+        self.segments.clear();
+        self.next_to_send = 0;
+        self.received = 0;
+    }
+}
+
+fn split_tts_text_segments(text: &str, max_chars: usize) -> Vec<String> {
+    if max_chars == 0 {
+        return Vec::new();
+    }
+
+    let mut segments = Vec::new();
+    let mut remaining = text.trim_start();
+
+    while !remaining.is_empty() {
+        if remaining.chars().count() <= max_chars {
+            let segment = remaining.trim().to_string();
+            if !segment.is_empty() {
+                segments.push(segment);
+            }
+            break;
+        }
+
+        let limit_byte = remaining
+            .char_indices()
+            .nth(max_chars)
+            .map(|(idx, _)| idx)
+            .unwrap_or(remaining.len());
+        let prefix = &remaining[..limit_byte];
+        let split_byte = natural_tts_split_byte(prefix).unwrap_or(limit_byte);
+        let segment = remaining[..split_byte].trim().to_string();
+
+        if segment.is_empty() {
+            let hard_segment = remaining[..limit_byte].to_string();
+            segments.push(hard_segment);
+            remaining = remaining[limit_byte..].trim_start();
+        } else {
+            segments.push(segment);
+            remaining = remaining[split_byte..].trim_start();
+        }
+    }
+
+    segments
+}
+
+fn natural_tts_split_byte(prefix: &str) -> Option<usize> {
+    find_last_paragraph_boundary(prefix)
+        .or_else(|| find_last_char_boundary_after(prefix, is_sentence_boundary))
+        .or_else(|| find_last_char_boundary_after(prefix, is_clause_boundary))
+        .or_else(|| find_last_char_boundary_before(prefix, char::is_whitespace))
+}
+
+fn find_last_paragraph_boundary(text: &str) -> Option<usize> {
+    text.rfind("\n\n")
+        .map(|idx| idx + "\n\n".len())
+        .filter(|idx| *idx > 0)
+}
+
+fn find_last_char_boundary_after(text: &str, predicate: fn(char) -> bool) -> Option<usize> {
+    text.char_indices()
+        .filter_map(|(idx, ch)| {
+            if predicate(ch) {
+                Some(idx + ch.len_utf8())
+            } else {
+                None
+            }
+        })
+        .last()
+        .filter(|idx| *idx > 0)
+}
+
+fn find_last_char_boundary_before(text: &str, predicate: fn(char) -> bool) -> Option<usize> {
+    text.char_indices()
+        .filter_map(|(idx, ch)| {
+            if predicate(ch) && idx > 0 {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .last()
+}
+
+fn is_sentence_boundary(ch: char) -> bool {
+    matches!(ch, '.' | '!' | '?' | '。' | '！' | '？' | '…' | '।')
+}
+
+fn is_clause_boundary(ch: char) -> bool {
+    matches!(ch, ',' | ';' | ':' | '，' | '、' | '；' | '：' | '،' | '؛')
+}
+
 live_design! {
     use link::theme::*;
     use link::shaders::*;
@@ -900,6 +1028,38 @@ live_design! {
             text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
             fn get_color(self) -> vec4 {
                 let normal = mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                let active = mix((PRIMARY_600), (PRIMARY_300), self.dark_mode);
+                return mix(normal, active, self.active);
+            }
+        }
+    }
+
+    TtsSettingsIconBtn = <Button> {
+        width: 44, height: 44
+        padding: {left: 0, right: 0}
+        text: "⚙"
+        draw_bg: {
+            instance active: 0.0
+            instance dark_mode: 0.0
+            instance hover: 0.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, 10.0);
+                let normal = mix((SLATE_50), (SLATE_800), self.dark_mode);
+                let hover = mix((SLATE_100), (SLATE_700), self.dark_mode);
+                let active = mix(vec4(0.88, 0.93, 1.0, 1.0), vec4(0.20, 0.27, 0.42, 1.0), self.dark_mode);
+                let bg = mix(mix(normal, hover, self.hover), active, self.active);
+                sdf.fill(bg);
+                sdf.stroke(mix((SLATE_200), (SLATE_600), self.dark_mode), 1.0);
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance active: 0.0
+            instance dark_mode: 0.0
+            text_style: <FONT_BOLD>{ font_size: 17.0 }
+            fn get_color(self) -> vec4 {
+                let normal = mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
                 let active = mix((PRIMARY_600), (PRIMARY_300), self.dark_mode);
                 return mix(normal, active, self.active);
             }
@@ -1751,7 +1911,8 @@ live_design! {
                     // Text input section (fills space) - Moxin.tts card style
                     input_section = <RoundedView> {
                         width: Fill, height: Fill
-                        flow: Down
+                        flow: Overlay
+                        align: {x: 1.0, y: 1.0}
                         show_bg: true
                         draw_bg: {
                             instance dark_mode: 0.0
@@ -1767,6 +1928,10 @@ live_design! {
                             }
                         }
 
+                        input_content = <View> {
+                            width: Fill, height: Fill
+                            flow: Down
+
                         // Header - hidden for Moxin.tts style (title is in page_header now)
                         header = <View> {
                             width: Fill, height: 0
@@ -1781,7 +1946,7 @@ live_design! {
                         input_container = <ScrollYView> {
                             width: Fill, height: Fill
                             flow: Down
-                            padding: {left: 24, right: 24, top: 24, bottom: 16}
+                            padding: {left: 24, right: 24, top: 24, bottom: 92}
 
                             text_input = <TextInput> {
                                 width: Fill, height: Fit
@@ -1898,6 +2063,7 @@ live_design! {
                                 flow: Down
                                 align: {x: 0.0}
                                 spacing: 6
+                                visible: false
 
                                 emotion_label = <Label> {
                                     width: Fit, height: Fit
@@ -1934,6 +2100,7 @@ live_design! {
                                 width: Fill, height: Fit
                                 flow: Down
                                 spacing: 6
+                                visible: false
 
                                 instruct_summary_row = <View> {
                                     width: Fill, height: Fit
@@ -2079,6 +2246,7 @@ live_design! {
                                 width: Fill, height: Fit
                                 flow: Down
                                 spacing: 8
+                                visible: false
 
                                 // Speed slider
                                 speed_row = <View> {
@@ -2342,31 +2510,49 @@ live_design! {
                                 align: {x: 0.0, y: 0.5}
                                 spacing: 16
 
-                                // Character count
-                                char_count = <Label> {
+                                status_stack = <View> {
                                     width: Fit, height: Fit
-                                    align: {y: 0.5}
-                                    draw_text: {
-                                        instance dark_mode: 0.0
-                                        text_style: { font_size: 13.0 }
-                                        fn get_color(self) -> vec4 {
-                                            return mix((MOXIN_TEXT_MUTED), (MOXIN_TEXT_MUTED_DARK), self.dark_mode);
+                                    flow: Down
+                                    align: {x: 0.0, y: 0.5}
+                                    spacing: 0
+
+                                    // Character count
+                                    char_count = <Label> {
+                                        width: Fit, height: Fit
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 13.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((MOXIN_TEXT_MUTED), (MOXIN_TEXT_MUTED_DARK), self.dark_mode);
+                                            }
                                         }
+                                        text: "0 字符"
                                     }
-                                    text: "0 / 1,000 字符"
+
+                                    generation_status = <Label> {
+                                        width: Fit, height: 0
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 11.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        text: ""
+                                    }
                                 }
 
                                 <View> { width: Fill, height: 1 }
 
-                                // Generate button with spinner - Moxin.tts style
+                                generate_spinner = <GenerateSpinner> {}
+
+                                settings_popover_btn = <TtsSettingsIconBtn> {}
+
+                                // Generate button - Moxin.tts style
                                 generate_section = <View> {
                                     width: Fit, height: Fit
                                     flow: Right
                                     align: {y: 0.5}
-                                    spacing: 8
-
-                                    // Spinner on the left (hidden by default)
-                                    generate_spinner = <GenerateSpinner> {}
 
                                     generate_btn = <Button> {
                                         width: Fit, height: 44
@@ -2393,6 +2579,421 @@ live_design! {
                                             text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
                                             fn get_color(self) -> vec4 {
                                                 return vec4(1.0, 1.0, 1.0, 1.0);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        }
+
+                        settings_flyout = <RoundedView> {
+                            width: Fill, height: Fit
+                            margin: {left: 20, right: 20, bottom: 76}
+                            flow: Down
+                            spacing: 12
+                            padding: {left: 18, right: 18, top: 16, bottom: 16}
+                            visible: false
+                            show_bg: true
+                            draw_bg: {
+                                instance dark_mode: 0.0
+                                instance border_radius: 10.0
+                                fn pixel(self) -> vec4 {
+                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                    sdf.box(1., 1., self.rect_size.x - 2., self.rect_size.y - 2., self.border_radius + 3.0);
+                                    sdf.fill(mix(vec4(0.05, 0.10, 0.20, 0.07), vec4(0.0, 0.0, 0.0, 0.18), self.dark_mode));
+                                    sdf.box(3., 3., self.rect_size.x - 6., self.rect_size.y - 6., self.border_radius + 1.5);
+                                    sdf.fill(mix(vec4(0.05, 0.10, 0.20, 0.05), vec4(0.0, 0.0, 0.0, 0.12), self.dark_mode));
+                                    sdf.box(4.5, 4.5, self.rect_size.x - 9., self.rect_size.y - 9., self.border_radius);
+                                    let bg = mix(vec4(1.0, 1.0, 1.0, 0.98), vec4(0.12, 0.16, 0.24, 0.98), self.dark_mode);
+                                    sdf.fill(bg);
+                                    sdf.stroke(mix(vec4(0.74, 0.80, 0.90, 1.0), vec4(0.37, 0.45, 0.60, 1.0), self.dark_mode), 1.25);
+                                    return sdf.result;
+                                }
+                            }
+
+                            emotion_row = <View> {
+                                width: Fill, height: Fit
+                                flow: Down
+                                align: {x: 0.0}
+                                spacing: 6
+
+                                emotion_label = <Label> {
+                                    width: Fit, height: Fit
+                                    draw_text: {
+                                        instance dark_mode: 0.0
+                                        text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                        fn get_color(self) -> vec4 {
+                                            return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                        }
+                                    }
+                                    text: "Emotion"
+                                }
+
+                                emotion_options = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right { wrap: true }
+                                    align: {y: 0.5}
+                                    spacing: 4
+
+                                    emotion_neutral_btn = <VoiceFilterChip> { text: "自然" }
+                                    emotion_happy_btn = <VoiceFilterChip> { text: "开心" }
+                                    emotion_angry_btn = <VoiceFilterChip> { text: "愤怒" }
+                                    emotion_sad_btn = <VoiceFilterChip> { text: "难过" }
+                                    emotion_gentle_btn = <VoiceFilterChip> { text: "温柔" }
+                                    emotion_excited_btn = <VoiceFilterChip> { text: "兴奋" }
+                                    emotion_custom_status = <VoiceFilterChip> {
+                                        visible: false
+                                        text: "自定义"
+                                    }
+                                }
+                            }
+
+                            instruct_section = <View> {
+                                width: Fill, height: Fit
+                                flow: Down
+                                spacing: 6
+
+                                instruct_summary_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right
+                                    align: {y: 0.5}
+                                    spacing: 8
+
+                                    instruct_summary = <Label> {
+                                        width: Fill, height: Fit
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 11.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        text: ""
+                                    }
+
+                                    edit_instruct_btn = <Button> {
+                                        width: Fit, height: 26
+                                        padding: {left: 8, right: 8}
+                                        text: "编辑指令"
+                                        draw_bg: {
+                                            instance dark_mode: 0.0
+                                            instance hover: 0.0
+                                            instance border_radius: 6.0
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                let base = mix((SLATE_50), (SLATE_800), self.dark_mode);
+                                                let hover = mix((SLATE_100), (SLATE_700), self.dark_mode);
+                                                sdf.fill(mix(base, hover, self.hover));
+                                                sdf.stroke(mix((SLATE_200), (SLATE_600), self.dark_mode), 1.0);
+                                                return sdf.result;
+                                            }
+                                        }
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                instruct_editor = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+                                    spacing: 6
+                                    visible: false
+
+                                    instruct_input = <TextInput> {
+                                        width: Fill, height: 72
+                                        padding: {left: 10, right: 10, top: 8, bottom: 8}
+                                        empty_text: "输入希望音色采用的语气、情绪或表达方式"
+                                        draw_bg: {
+                                            instance dark_mode: 0.0
+                                            instance border_radius: 6.0
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                sdf.fill(mix((WHITE), (SLATE_800), self.dark_mode));
+                                                sdf.stroke(mix((SLATE_200), (SLATE_600), self.dark_mode), 1.0);
+                                                return sdf.result;
+                                            }
+                                        }
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 12.0, line_spacing: 1.4 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        draw_cursor: {
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 0.5);
+                                                sdf.fill((MOXIN_PRIMARY));
+                                                return sdf.result;
+                                            }
+                                        }
+                                        draw_selection: {
+                                            fn pixel(self) -> vec4 {
+                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 1.0);
+                                                sdf.fill(vec4(0.39, 0.40, 0.95, 0.2));
+                                                return sdf.result;
+                                            }
+                                        }
+                                    }
+
+                                    instruct_editor_footer = <View> {
+                                        width: Fill, height: Fit
+                                        flow: Right
+                                        align: {x: 1.0, y: 0.5}
+                                        spacing: 8
+
+                                        instruct_char_count = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                instance over_limit: 0.0
+                                                text_style: { font_size: 10.0 }
+                                                fn get_color(self) -> vec4 {
+                                                    let normal = mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                                    return mix(normal, (RED_500), self.over_limit);
+                                                }
+                                            }
+                                            text: ""
+                                        }
+
+                                        collapse_instruct_btn = <Button> {
+                                            width: Fit, height: 24
+                                            padding: {left: 8, right: 8}
+                                            text: "收起"
+                                            draw_bg: {
+                                                instance dark_mode: 0.0
+                                                fn pixel(self) -> vec4 {
+                                                    return vec4(0., 0., 0., 0.);
+                                                }
+                                            }
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
+                                                fn get_color(self) -> vec4 {
+                                                    return mix((PRIMARY_600), (PRIMARY_300), self.dark_mode);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            param_controls = <View> {
+                                width: Fill, height: Fit
+                                flow: Down
+                                spacing: 10
+
+                                speed_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right
+                                    align: {y: 0.5}
+                                    spacing: 10
+
+                                    speed_header = <View> {
+                                        width: 92, height: Fit
+                                        flow: Right
+                                        align: {y: 0.5}
+                                        speed_label = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                            }
+                                            text: "Speed"
+                                        }
+                                        <View> { width: Fill, height: 1 }
+                                        speed_value = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: { font_size: 10.0 }
+                                                fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                            }
+                                            text: "1.0x"
+                                        }
+                                    }
+
+                                    speed_slider_row = <View> {
+                                        width: Fill, height: Fit
+                                        flow: Right
+                                        align: {y: 0.5}
+                                        spacing: 6
+                                        speed_min_slot = <View> {
+                                            width: 48, height: Fit
+                                            flow: Right
+                                            align: {y: 0.5}
+                                            slower_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 9.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Slower"
+                                            }
+                                            <View> { width: Fill, height: 1 }
+                                        }
+                                        speed_slider = <ParamValueSlider> {}
+                                        speed_max_slot = <View> {
+                                            width: 48, height: Fit
+                                            flow: Right
+                                            align: {y: 0.5}
+                                            <View> { width: Fill, height: 1 }
+                                            faster_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 9.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Faster"
+                                            }
+                                        }
+                                    }
+                                }
+
+                                pitch_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right
+                                    align: {y: 0.5}
+                                    spacing: 10
+                                    pitch_header = <View> {
+                                        width: 92, height: Fit
+                                        flow: Right
+                                        align: {y: 0.5}
+                                        pitch_label = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                            }
+                                            text: "Pitch"
+                                        }
+                                        <View> { width: Fill, height: 1 }
+                                        pitch_value = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: { font_size: 10.0 }
+                                                fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                            }
+                                            text: "0"
+                                        }
+                                    }
+                                    pitch_slider_row = <View> {
+                                        width: Fill, height: Fit
+                                        flow: Right
+                                        align: {y: 0.5}
+                                        spacing: 6
+                                        pitch_min_slot = <View> {
+                                            width: 48, height: Fit
+                                            flow: Right
+                                            align: {y: 0.5}
+                                            lower_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 9.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Lower"
+                                            }
+                                            <View> { width: Fill, height: 1 }
+                                        }
+                                        pitch_slider = <ParamValueSlider> {}
+                                        pitch_max_slot = <View> {
+                                            width: 48, height: Fit
+                                            flow: Right
+                                            align: {y: 0.5}
+                                            <View> { width: Fill, height: 1 }
+                                            higher_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 9.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Higher"
+                                            }
+                                        }
+                                    }
+                                }
+
+                                volume_row = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Right
+                                    align: {y: 0.5}
+                                    spacing: 10
+                                    volume_header = <View> {
+                                        width: 92, height: Fit
+                                        flow: Right
+                                        align: {y: 0.5}
+                                        volume_label = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                            }
+                                            text: "Volume"
+                                        }
+                                        <View> { width: Fill, height: 1 }
+                                        volume_value = <Label> {
+                                            width: Fit, height: Fit
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: { font_size: 10.0 }
+                                                fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                            }
+                                            text: "100%"
+                                        }
+                                    }
+                                    volume_slider_row = <View> {
+                                        width: Fill, height: Fit
+                                        flow: Right
+                                        align: {y: 0.5}
+                                        spacing: 6
+                                        volume_min_slot = <View> {
+                                            width: 48, height: Fit
+                                            flow: Right
+                                            align: {y: 0.5}
+                                            quiet_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 9.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Quiet"
+                                            }
+                                            <View> { width: Fill, height: 1 }
+                                        }
+                                        volume_slider = <ParamValueSlider> {}
+                                        volume_max_slot = <View> {
+                                            width: 48, height: Fit
+                                            flow: Right
+                                            align: {y: 0.5}
+                                            <View> { width: Fill, height: 1 }
+                                            loud_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 9.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Loud"
                                             }
                                         }
                                     }
@@ -6600,12 +7201,13 @@ live_design! {
 
                     // Progress bar container
                     progress_bar_container = <View> {
-                        width: Fill, height: 4
+                        width: Fill, height: 16
                         margin: {top: 2}
+                        align: {y: 0.5}
 
                         // Progress bar
                         progress_bar = <View> {
-                            width: Fill, height: Fill
+                            width: Fill, height: 4
                             show_bg: true
                             draw_bg: {
                                 instance dark_mode: 0.0
@@ -8407,6 +9009,12 @@ pub struct TTSScreen {
     #[rust]
     pending_generation_instruct: Option<String>,
     #[rust]
+    pending_generation_expected_segments: usize,
+    #[rust]
+    pending_generation_received_segments: usize,
+    #[rust]
+    pending_generation_dispatch: TtsSegmentDispatch,
+    #[rust]
     has_generated_audio: bool,
 
     // Preview player for reference audio
@@ -8549,6 +9157,8 @@ pub struct TTSScreen {
     tts_instruct_state: TtsInstructState,
     #[rust]
     tts_slider_dragging: Option<TtsParamSliderKind>,
+    #[rust]
+    tts_settings_open: bool,
 
     // Global settings modal
     #[rust]
@@ -8731,6 +9341,9 @@ impl Widget for TTSScreen {
             self.pending_generation_emotion_id = None;
             self.pending_generation_emotion_label = None;
             self.pending_generation_instruct = None;
+            self.pending_generation_expected_segments = 0;
+            self.pending_generation_received_segments = 0;
+            self.pending_generation_dispatch.clear();
             self.has_generated_audio = false;
             // Initialize current page — Live Translation is the primary feature
             self.current_page = AppPage::Translation;
@@ -8776,6 +9389,7 @@ impl Widget for TTSScreen {
             self.tts_volume = 100.0;
             self.tts_instruct_state = TtsInstructState::default();
             self.tts_slider_dragging = None;
+            self.tts_settings_open = false;
             self.controls_panel_tab = 1;
             self.apply_controls_panel_tab_visibility(cx);
             self.update_tts_emotion_controls(cx);
@@ -9079,49 +9693,82 @@ impl Widget for TTSScreen {
                 }
             }
 
-            // Poll Dora Audio - store audio samples instead of auto-playing
-            if let Some(dora) = &self.dora {
+            // Poll Dora Audio - store audio samples instead of auto-playing.
+            let chunks = if let Some(dora) = &self.dora {
                 if dora.is_running() {
-                    let shared = dora.shared_dora_state();
-                    let chunks = shared.audio.drain();
-                    if !chunks.is_empty() {
-                        for audio in chunks {
-                            self.stored_audio_samples.extend(&audio.samples);
-                            self.stored_audio_sample_rate = audio.sample_rate;
-                        }
-                        self.rebuild_processed_audio_samples();
-                        // Transition to Ready state - user must click Play
-                        if self.tts_status == TTSStatus::Generating {
-                            let sample_count = self.effective_audio_samples().len();
-                            let effective_rate = self.effective_audio_sample_rate();
-                            let duration_secs = if effective_rate > 0 {
-                                sample_count as f32 / effective_rate as f32
-                            } else {
-                                0.0
-                            };
+                    dora.shared_dora_state().audio.drain()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            if !chunks.is_empty() {
+                for audio in chunks {
+                    self.stored_audio_samples.extend(&audio.samples);
+                    self.stored_audio_sample_rate = audio.sample_rate;
+                    if self.tts_status == TTSStatus::Generating
+                        && self.pending_generation_expected_segments > 0
+                    {
+                        self.pending_generation_dispatch.mark_received();
+                        self.pending_generation_received_segments =
+                            self.pending_generation_dispatch.received;
+                        self.update_generation_status(cx);
+                        if self.pending_generation_expected_segments > 1 {
                             self.add_log(
                                 cx,
                                 &format!(
-                                    "[INFO] [tts] Audio generated: {} samples, {:.1}s duration",
-                                    sample_count, duration_secs
+                                    "[INFO] [tts] Received audio segment {}/{}",
+                                    self.pending_generation_received_segments,
+                                    self.pending_generation_expected_segments
                                 ),
                             );
-                            self.tts_status = TTSStatus::Ready;
-                            self.audio_playing_time = 0.0;
-                            self.has_generated_audio = true;
-                            let generated_voice_id = self
-                                .pending_generation_voice_id
-                                .clone()
-                                .or_else(|| self.selected_voice_id.clone());
-                            if let Some(voice_id) = generated_voice_id {
-                                self.apply_generated_voice_to_player_bar(cx, &voice_id, None);
-                            }
-                            self.append_current_generation_to_history(cx);
-                            self.clear_pending_generation_snapshot();
-                            self.set_generate_button_loading(cx, false);
-                            self.update_player_bar(cx);
+                        }
+
+                        if !self.pending_generation_dispatch.is_complete()
+                            && !self.send_next_pending_tts_segment(cx)
+                        {
+                            self.fail_pending_tts_generation(
+                                cx,
+                                "[ERROR] [tts] Failed to send next prompt segment to Dora",
+                            );
+                            break;
                         }
                     }
+                }
+                self.rebuild_processed_audio_samples();
+                // Transition to Ready state - user must click Play
+                if self.tts_status == TTSStatus::Generating
+                    && self.pending_generation_dispatch.is_complete()
+                {
+                    let sample_count = self.effective_audio_samples().len();
+                    let effective_rate = self.effective_audio_sample_rate();
+                    let duration_secs = if effective_rate > 0 {
+                        sample_count as f32 / effective_rate as f32
+                    } else {
+                        0.0
+                    };
+                    self.add_log(
+                        cx,
+                        &format!(
+                            "[INFO] [tts] Audio generated: {} samples, {:.1}s duration",
+                            sample_count, duration_secs
+                        ),
+                    );
+                    self.tts_status = TTSStatus::Ready;
+                    self.audio_playing_time = 0.0;
+                    self.has_generated_audio = true;
+                    let generated_voice_id = self
+                        .pending_generation_voice_id
+                        .clone()
+                        .or_else(|| self.selected_voice_id.clone());
+                    if let Some(voice_id) = generated_voice_id {
+                        self.apply_generated_voice_to_player_bar(cx, &voice_id, None);
+                    }
+                    self.append_current_generation_to_history(cx);
+                    self.clear_pending_generation_snapshot();
+                    self.set_generate_button_loading(cx, false);
+                    self.update_player_bar(cx);
                 }
             }
 
@@ -10044,6 +10691,7 @@ impl Widget for TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
                     .model_row
                     .model_picker_btn
@@ -10102,7 +10750,7 @@ impl Widget for TTSScreen {
         let selected_emotion = if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_neutral_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_neutral_btn
             ))
             .clicked(&actions)
         {
@@ -10110,7 +10758,7 @@ impl Widget for TTSScreen {
         } else if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_happy_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_happy_btn
             ))
             .clicked(&actions)
         {
@@ -10118,7 +10766,7 @@ impl Widget for TTSScreen {
         } else if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_angry_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_angry_btn
             ))
             .clicked(&actions)
         {
@@ -10126,7 +10774,7 @@ impl Widget for TTSScreen {
         } else if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_sad_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_sad_btn
             ))
             .clicked(&actions)
         {
@@ -10134,7 +10782,7 @@ impl Widget for TTSScreen {
         } else if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_gentle_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_gentle_btn
             ))
             .clicked(&actions)
         {
@@ -10142,7 +10790,7 @@ impl Widget for TTSScreen {
         } else if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_excited_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_excited_btn
             ))
             .clicked(&actions)
         {
@@ -10156,7 +10804,7 @@ impl Widget for TTSScreen {
         if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.edit_instruct_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_summary_row.edit_instruct_btn
             ))
             .clicked(&actions)
         {
@@ -10166,7 +10814,7 @@ impl Widget for TTSScreen {
         if self
             .view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
             ))
             .clicked(&actions)
         {
@@ -10176,12 +10824,33 @@ impl Widget for TTSScreen {
         if let Some(changed_text) = self
             .view
             .text_input(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_input
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input
             ))
             .changed(&actions)
         {
             self.tts_instruct_state.edit(changed_text);
             self.update_tts_emotion_controls(cx);
+        }
+
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_content
+                    .bottom_bar
+                    .action_row
+                    .settings_popover_btn
+            ))
+            .clicked(&actions)
+        {
+            self.tts_settings_open = !self.tts_settings_open;
+            self.update_settings_tabs(cx);
         }
 
         // Handle TTS parameter sliders (drag + click-to-jump)
@@ -10195,7 +10864,7 @@ impl Widget for TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .speed_row
                     .speed_slider_row
@@ -10214,7 +10883,7 @@ impl Widget for TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .pitch_row
                     .pitch_slider_row
@@ -10233,7 +10902,7 @@ impl Widget for TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .volume_row
                     .volume_slider_row
@@ -12293,41 +12962,13 @@ impl Widget for TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
                     .text_input
             ))
             .changed(&actions)
         {
-            let mut effective_text = changed_text;
-            if effective_text.chars().count() > TTS_INPUT_MAX_CHARS {
-                let cutoff = effective_text
-                    .char_indices()
-                    .nth(TTS_INPUT_MAX_CHARS)
-                    .map(|(idx, _)| idx)
-                    .unwrap_or(effective_text.len());
-                effective_text.truncate(cutoff);
-                self.view
-                    .text_input(ids!(
-                        content_wrapper
-                            .main_content
-                            .left_column
-                            .content_area
-                            .tts_page
-                            .cards_container
-                            .input_section
-                            .input_container
-                            .text_input
-                    ))
-                    .set_text(cx, &effective_text);
-                self.show_toast(
-                    cx,
-                    self.tr(
-                        "文本已自动截断到 1,000 字符",
-                        "Text was automatically truncated to 1,000 characters",
-                    ),
-                );
-            }
-            self.update_char_count_from_text(cx, &effective_text);
+            self.update_char_count_from_text(cx, &changed_text);
         }
 
         // Handle generate button
@@ -12341,7 +12982,9 @@ impl Widget for TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
+                    .action_row
                     .generate_section
                     .generate_btn
             ))
@@ -12432,6 +13075,7 @@ impl Widget for TTSScreen {
         {
             self.toggle_playback(cx);
         }
+        self.handle_playback_progress_seek_event(cx, event);
 
         // Handle stop button in audio player bar
         if self
@@ -13130,7 +13774,8 @@ impl TTSScreen {
                 .tts_page
                 .cards_container
                 .input_section
-                .input_container
+                .input_content
+                    .input_container
                 .text_input
         ));
         let main_container_area = self
@@ -13143,6 +13788,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
             ))
             .area();
@@ -13154,8 +13800,8 @@ impl TTSScreen {
                 .tts_page
                 .cards_container
                 .input_section
-                .bottom_bar
-                .instruct_section
+                .settings_flyout
+                    .instruct_section
                 .instruct_editor
                 .instruct_input
         ));
@@ -14762,6 +15408,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
                     .text_input
             ))
@@ -14794,6 +15441,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
                     .model_row
                     .model_label
@@ -14809,7 +15457,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .speed_row
                     .speed_header
@@ -14825,7 +15473,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .speed_row
                     .speed_slider_row
@@ -14842,7 +15490,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .speed_row
                     .speed_slider_row
@@ -14859,7 +15507,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .pitch_row
                     .pitch_header
@@ -14875,7 +15523,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .pitch_row
                     .pitch_slider_row
@@ -14892,7 +15540,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .pitch_row
                     .pitch_slider_row
@@ -14909,7 +15557,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .volume_row
                     .volume_header
@@ -14925,7 +15573,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .volume_row
                     .volume_slider_row
@@ -14942,7 +15590,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .volume_row
                     .volume_slider_row
@@ -17078,6 +17726,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
                     .text_input
             ))
@@ -17088,9 +17737,9 @@ impl TTSScreen {
     fn update_char_count_from_text(&mut self, cx: &mut Cx, text: &str) {
         let count = text.chars().count();
         let label = if self.is_english() {
-            format!("{} / 1,000 characters", count)
+            format!("{} characters", count)
         } else {
-            format!("{} / 1,000 字符", count)
+            format!("{} 字符", count)
         };
         self.view
             .label(ids!(
@@ -17101,10 +17750,181 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
+                    .action_row
+                    .status_stack
                     .char_count
             ))
             .set_text(cx, &label);
+    }
+
+    fn update_generation_status(&mut self, cx: &mut Cx) {
+        let show = self.tts_status == TTSStatus::Generating
+            && self.pending_generation_expected_segments > 0;
+        let received = self.pending_generation_received_segments;
+        let expected = self.pending_generation_expected_segments.max(1);
+        let current = if expected > 1 {
+            (received + 1).min(expected)
+        } else {
+            1
+        };
+        let label = if self.is_english() {
+            format!("Generating segment {}/{}...", current, expected)
+        } else {
+            format!("正在生成 {}/{}...", current, expected)
+        };
+
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_content
+                    .bottom_bar
+                    .action_row
+                    .status_stack
+                    .generation_status
+            ))
+            .set_text(cx, if show { label.as_str() } else { "" });
+        if show {
+            self.view
+                .view(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                ))
+                .apply_over(cx, live! { spacing: 2 });
+            self.view
+                .label(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                        .generation_status
+                ))
+                .apply_over(cx, live! { height: Fit });
+        } else {
+            self.view
+                .view(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                ))
+                .apply_over(cx, live! { spacing: 0 });
+            self.view
+                .label(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                        .generation_status
+                ))
+                .apply_over(cx, live! { height: 0 });
+        }
+    }
+
+    fn send_next_pending_tts_segment(&mut self, cx: &mut Cx) -> bool {
+        let Some(voice_id) = self.pending_generation_voice_id.clone() else {
+            self.add_log(cx, "[ERROR] [tts] Missing pending voice for generation segment");
+            return false;
+        };
+        let Some((segment_number, total_segments, segment)) =
+            self.pending_generation_dispatch.take_next()
+        else {
+            return true;
+        };
+
+        let voice_info = self
+            .library_voices
+            .iter()
+            .find(|voice| voice.id == voice_id)
+            .cloned();
+        let prompt = self.build_tts_prompt_for_segment(&voice_id, voice_info.as_ref(), &segment);
+        let prompt_preview = if prompt.chars().count() > 100 {
+            let end: usize = prompt
+                .char_indices()
+                .nth(100)
+                .map(|(i, _)| i)
+                .unwrap_or(prompt.len());
+            format!("{}...", &prompt[..end])
+        } else {
+            prompt.clone()
+        };
+        self.add_log(
+            cx,
+            &format!(
+                "[DEBUG] Sending prompt segment {}/{}: {}",
+                segment_number, total_segments, prompt_preview
+            ),
+        );
+
+        let payload = serde_json::json!({
+            "prompt": prompt,
+            "speed": self.pending_generation_speed,
+            "pitch": self.pending_generation_pitch,
+            "volume": self.pending_generation_volume,
+            "emotion": self.pending_generation_emotion_id.clone(),
+            "instruct": self.pending_generation_instruct.clone(),
+        });
+        let payload_text = payload.to_string();
+        let sent = self
+            .dora
+            .as_ref()
+            .map(|d| d.send_prompt(&payload_text))
+            .unwrap_or(false);
+        if !sent {
+            self.add_log(
+                cx,
+                &format!(
+                    "[ERROR] [tts] Failed to send prompt segment {}/{} to Dora",
+                    segment_number, total_segments
+                ),
+            );
+        }
+        sent
+    }
+
+    fn fail_pending_tts_generation(&mut self, cx: &mut Cx, message: &str) {
+        self.add_log(cx, message);
+        self.clear_pending_generation_snapshot();
+        self.tts_status = TTSStatus::Error(message.to_string());
+        self.set_generate_button_loading(cx, false);
+        self.update_player_bar(cx);
     }
 
     fn set_generate_button_loading(&mut self, cx: &mut Cx, loading: bool) {
@@ -17138,7 +17958,9 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
+                    .action_row
                     .generate_section
                     .generate_btn
             ))
@@ -17152,7 +17974,9 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
+                    .action_row
                     .generate_section
                     .generate_btn
             ))
@@ -17168,8 +17992,9 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
-                    .generate_section
+                    .action_row
                     .generate_spinner
             ))
             .set_visible(cx, loading);
@@ -17185,8 +18010,9 @@ impl TTSScreen {
                         .tts_page
                         .cards_container
                         .input_section
+                        .input_content
                         .bottom_bar
-                        .generate_section
+                        .action_row
                         .generate_spinner
                 ))
                 .animator_play(cx, ids!(spin.on));
@@ -17200,13 +18026,15 @@ impl TTSScreen {
                         .tts_page
                         .cards_container
                         .input_section
+                        .input_content
                         .bottom_bar
-                        .generate_section
+                        .action_row
                         .generate_spinner
                 ))
                 .animator_play(cx, ids!(spin.off));
         }
 
+        self.update_generation_status(cx);
         self.view.redraw(cx);
     }
 
@@ -17221,6 +18049,9 @@ impl TTSScreen {
         self.pending_generation_emotion_id = None;
         self.pending_generation_emotion_label = None;
         self.pending_generation_instruct = None;
+        self.pending_generation_expected_segments = 0;
+        self.pending_generation_received_segments = 0;
+        self.pending_generation_dispatch.clear();
     }
 
     fn update_audio_player_visibility(&mut self, cx: &mut Cx) {
@@ -17631,7 +18462,8 @@ impl TTSScreen {
                         .tts_page
                         .cards_container
                         .input_section
-                        .input_container
+                        .input_content
+                    .input_container
                         .text_input
                 ))
                 .text()
@@ -17865,6 +18697,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
                     .text_input
             ))
@@ -17894,7 +18727,7 @@ impl TTSScreen {
         self.tts_instruct_state.collapse();
         self.view
             .text_input(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_input
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input
             ))
             .set_text(cx, self.tts_instruct_state.text());
         self.update_tts_emotion_controls(cx);
@@ -17973,6 +18806,102 @@ impl TTSScreen {
             );
 
         self.view.redraw(cx);
+    }
+
+    fn playback_duration_secs(&self) -> Option<f64> {
+        let audio_len = self.effective_audio_samples().len();
+        let effective_rate = self.effective_audio_sample_rate();
+        if audio_len == 0 || effective_rate == 0 {
+            return None;
+        }
+        Some(audio_len as f64 / effective_rate as f64)
+    }
+
+    fn clamped_seek_time(&self, requested_secs: f64) -> Option<f64> {
+        let total_duration = self.playback_duration_secs()?;
+        if total_duration <= 0.0 {
+            return None;
+        }
+        let max_start = (total_duration - 0.05).max(0.0);
+        Some(requested_secs.clamp(0.0, max_start))
+    }
+
+    fn start_playback_from_time(&mut self, cx: &mut Cx, start_time_secs: f64) -> bool {
+        let playback_samples = self.effective_audio_samples().to_vec();
+        let effective_rate = self.effective_audio_sample_rate();
+        if playback_samples.is_empty() || effective_rate == 0 {
+            return false;
+        }
+
+        let start_time = self.clamped_seek_time(start_time_secs).unwrap_or(0.0);
+        let start_sample = ((start_time * effective_rate as f64).round() as usize)
+            .min(playback_samples.len().saturating_sub(1));
+        let remaining_samples = &playback_samples[start_sample..];
+        if remaining_samples.is_empty() {
+            return false;
+        }
+
+        if let Some(player) = &self.audio_player {
+            player.stop();
+            player.write_audio(remaining_samples);
+            self.audio_playing_time = start_time;
+            self.tts_status = TTSStatus::Playing;
+            self.update_playback_progress(cx);
+            return true;
+        }
+        false
+    }
+
+    fn seek_playback_to_ratio(&mut self, cx: &mut Cx, ratio: f64) {
+        if self.tts_status == TTSStatus::Generating {
+            return;
+        }
+        let Some(total_duration) = self.playback_duration_secs() else {
+            return;
+        };
+        let target_time = self.clamped_seek_time(total_duration * ratio).unwrap_or(0.0);
+
+        if self.tts_status == TTSStatus::Playing {
+            if self.start_playback_from_time(cx, target_time) {
+                self.add_log(
+                    cx,
+                    &format!("[INFO] [tts] Seeked playback to {:.1}s", target_time),
+                );
+            }
+        } else {
+            self.audio_playing_time = target_time;
+            self.update_playback_progress(cx);
+            self.update_player_bar(cx);
+        }
+    }
+
+    fn handle_playback_progress_seek_event(&mut self, cx: &mut Cx, event: &Event) {
+        let progress_area = self
+            .view
+            .view(ids!(
+                content_wrapper
+                    .audio_player_bar
+                    .playback_controls
+                    .progress_row
+                    .progress_bar_container
+            ))
+            .area();
+        if progress_area.is_empty() {
+            return;
+        }
+
+        match event.hits(cx, progress_area) {
+            Hit::FingerHoverOver(_) => {
+                if self.has_generated_audio && self.tts_status != TTSStatus::Generating {
+                    cx.set_cursor(MouseCursor::Hand);
+                }
+            }
+            Hit::FingerDown(fe) if fe.device.is_primary_hit() => {
+                let ratio = Self::slider_ratio_from_rect(fe.abs.x, fe.rect);
+                self.seek_playback_to_ratio(cx, ratio);
+            }
+            _ => {}
+        }
     }
 
     fn handle_preview_request(&mut self, cx: &mut Cx, voice_id: &str) {
@@ -20876,6 +21805,72 @@ impl TTSScreen {
         None
     }
 
+    fn build_tts_prompt_for_segment(
+        &self,
+        voice_id: &str,
+        voice_info: Option<&Voice>,
+        text: &str,
+    ) -> String {
+        if let Some(voice) = voice_info {
+            if voice.source == crate::voice_data::VoiceSource::Trained {
+                if let (
+                    Some(gpt_weights),
+                    Some(sovits_weights),
+                    Some(ref_audio),
+                    Some(prompt_text),
+                ) = (
+                    &voice.gpt_weights,
+                    &voice.sovits_weights,
+                    &voice.reference_audio_path,
+                    &voice.prompt_text,
+                ) {
+                    format!(
+                        "VOICE:TRAINED|{}|{}|{}|{}|{}|{}",
+                        gpt_weights, sovits_weights, ref_audio, prompt_text, voice.language, text
+                    )
+                } else {
+                    format!("VOICE:Doubao|{}", text)
+                }
+            } else if voice.source == crate::voice_data::VoiceSource::Custom {
+                if let (Some(ref_audio), Some(prompt_text)) =
+                    (&voice.reference_audio_path, &voice.prompt_text)
+                {
+                    let ref_audio_path = crate::voice_persistence::get_reference_audio_path(voice)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| ref_audio.clone());
+                    format!(
+                        "VOICE:CUSTOM|{}|{}|{}|{}",
+                        ref_audio_path, prompt_text, voice.language, text
+                    )
+                } else {
+                    format!("VOICE:Doubao|{}", text)
+                }
+            } else if voice.source == crate::voice_data::VoiceSource::BundledIcl {
+                if let Some(ref_filename) = &voice.reference_audio_path {
+                    let ref_audio_path = self
+                        .resolve_bundled_icl_ref_path(&voice.id, ref_filename)
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default();
+
+                    if ref_audio_path.is_empty() {
+                        format!("VOICE:vivian|{}", text)
+                    } else {
+                        format!(
+                            "VOICE:CUSTOM|{}|{}|{}|{}",
+                            ref_audio_path, "", voice.language, text
+                        )
+                    }
+                } else {
+                    format!("VOICE:vivian|{}", text)
+                }
+            } else {
+                format!("VOICE:{}|{}", voice_id, text)
+            }
+        } else {
+            format!("VOICE:{}|{}", voice_id, text)
+        }
+    }
+
     fn generate_speech(&mut self, cx: &mut Cx) {
         // Qwen backend currently does not support VOICE:TRAINED prompt format.
         let selected_voice_is_trained = self
@@ -20922,11 +21917,12 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
                     .text_input
             ))
             .text();
-        if text.is_empty() {
+        if text.trim().is_empty() {
             self.add_log(
                 cx,
                 "[WARN] [tts] Please enter some text to convert to speech.",
@@ -20934,15 +21930,12 @@ impl TTSScreen {
             return;
         }
 
-        if text.chars().count() > TTS_INPUT_MAX_CHARS {
-            self.show_toast(
+        let text_segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+        if text_segments.is_empty() {
+            self.add_log(
                 cx,
-                self.tr(
-                    "文本超过 1,000 字符限制，请缩短后重试",
-                    "Text exceeds 1,000 character limit, please shorten and try again",
-                ),
+                "[WARN] [tts] Please enter some text to convert to speech.",
             );
-            self.set_generate_button_loading(cx, false);
             return;
         }
         if tts_emotion::instruct_is_over_limit_for_request(
@@ -21093,144 +22086,14 @@ impl TTSScreen {
         self.stored_audio_samples.clear();
         self.processed_audio_samples.clear();
         self.stored_audio_sample_rate = 32000;
+        if let Some(dora) = &self.dora {
+            let _ = dora.shared_dora_state().audio.drain();
+        }
 
         self.tts_status = TTSStatus::Generating;
         self.set_generate_button_loading(cx, true);
         self.apply_voice_to_player_bar(cx, &voice_id, pending_voice_name.as_deref());
         self.update_player_bar(cx);
-
-        // For PrimeSpeech, encode voice selection in prompt using VOICE: prefix
-        // The dora-primespeech node will parse this format
-        // For custom voices, use extended format: VOICE:CUSTOM|<ref_audio_path>|<prompt_text>|<language>|<text>
-        // For trained voices, use: VOICE:TRAINED|<gpt_weights>|<sovits_weights>|<ref_audio>|<prompt_text>|<language>|<text>
-        let prompt = if let Some(voice) = voice_info {
-            if voice.source == crate::voice_data::VoiceSource::Trained {
-                // Trained voice (Pro Mode) - need to send model weights, reference audio, and prompt text
-                if let (
-                    Some(gpt_weights),
-                    Some(sovits_weights),
-                    Some(ref_audio),
-                    Some(prompt_text),
-                ) = (
-                    &voice.gpt_weights,
-                    &voice.sovits_weights,
-                    &voice.reference_audio_path,
-                    &voice.prompt_text,
-                ) {
-                    self.add_log(
-                        cx,
-                        &format!(
-                            "[INFO] [tts] Using trained voice with custom models: {}",
-                            voice.name
-                        ),
-                    );
-                    self.add_log(cx, &format!("[INFO] [tts] GPT: {}", gpt_weights));
-                    self.add_log(cx, &format!("[INFO] [tts] SoVITS: {}", sovits_weights));
-
-                    // VOICE:TRAINED|<gpt_weights>|<sovits_weights>|<ref_audio>|<prompt_text>|<language>|<text>
-                    format!(
-                        "VOICE:TRAINED|{}|{}|{}|{}|{}|{}",
-                        gpt_weights, sovits_weights, ref_audio, prompt_text, voice.language, text
-                    )
-                } else {
-                    self.add_log(
-                        cx,
-                        "[WARN] [tts] Trained voice missing model weights or ref audio, using default",
-                    );
-                    format!("VOICE:Doubao|{}", text)
-                }
-            } else if voice.source == crate::voice_data::VoiceSource::Custom {
-                // Custom voice (Express Mode) - need to send reference audio path and prompt text
-                if let (Some(ref_audio), Some(prompt_text)) =
-                    (&voice.reference_audio_path, &voice.prompt_text)
-                {
-                    // Get absolute path for reference audio
-                    let ref_audio_path = crate::voice_persistence::get_reference_audio_path(&voice)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_else(|| ref_audio.clone());
-
-                    self.add_log(
-                        cx,
-                        &format!("[INFO] [tts] Custom voice ref audio: {}", ref_audio_path),
-                    );
-
-                    // Extended format for custom voices (zero-shot)
-                    // VOICE:CUSTOM|<ref_audio_path>|<prompt_text>|<language>|<text_to_speak>
-                    format!(
-                        "VOICE:CUSTOM|{}|{}|{}|{}",
-                        ref_audio_path, prompt_text, voice.language, text
-                    )
-                } else {
-                    self.add_log(
-                        cx,
-                        "[WARN] [tts] Custom voice missing ref audio or prompt text, using default",
-                    );
-                    format!("VOICE:Doubao|{}", text)
-                }
-            } else if voice.source == crate::voice_data::VoiceSource::BundledIcl {
-                // Bundled ref voice - force x-vector clone path by sending empty prompt_text.
-                if let Some(ref_filename) = &voice.reference_audio_path {
-                    let ref_audio_path = self
-                        .resolve_bundled_icl_ref_path(&voice.id, ref_filename)
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default();
-
-                    if ref_audio_path.is_empty() {
-                        self.add_log(
-                            cx,
-                            &format!(
-                            "[WARN] [tts] BundledIcl voice '{}' ref audio not found, using default",
-                            voice.id
-                        ),
-                        );
-                        format!("VOICE:vivian|{}", text)
-                    } else {
-                        self.add_log(
-                            cx,
-                            &format!(
-                                "[INFO] [tts] BundledIcl voice '{}' ref audio (x-vector mode): {}",
-                                voice.id, ref_audio_path
-                            ),
-                        );
-                        format!(
-                            "VOICE:CUSTOM|{}|{}|{}|{}",
-                            ref_audio_path, "", voice.language, text
-                        )
-                    }
-                } else {
-                    format!("VOICE:vivian|{}", text)
-                }
-            } else {
-                // Built-in voice - use simple format
-                format!("VOICE:{}|{}", voice_id, text)
-            }
-        } else {
-            // Voice not found, use default
-            format!("VOICE:{}|{}", voice_id, text)
-        };
-
-        // Debug: log the formatted prompt (use char boundary safe truncation)
-        let prompt_preview = if prompt.chars().count() > 100 {
-            let end: usize = prompt
-                .char_indices()
-                .nth(100)
-                .map(|(i, _)| i)
-                .unwrap_or(prompt.len());
-            format!("{}...", &prompt[..end])
-        } else {
-            prompt.clone()
-        };
-        self.add_log(cx, &format!("[DEBUG] Sending prompt: {}", prompt_preview));
-
-        let payload = serde_json::json!({
-            "prompt": prompt,
-            "speed": self.pending_generation_speed,
-            "pitch": self.pending_generation_pitch,
-            "volume": self.pending_generation_volume,
-            "emotion": self.pending_generation_emotion_id.clone(),
-            "instruct": self.pending_generation_instruct.clone(),
-        });
-        let payload_text = payload.to_string();
 
         self.add_log(
             cx,
@@ -21245,15 +22108,25 @@ impl TTSScreen {
             ),
         );
 
-        // Send prompt payload to dora.
-        let send_result = self
-            .dora
-            .as_ref()
-            .map(|d| d.send_prompt(&payload_text))
-            .unwrap_or(false);
+        let expected_segments = text_segments.len();
+        self.pending_generation_expected_segments = expected_segments;
+        self.pending_generation_received_segments = 0;
+        self.pending_generation_dispatch = TtsSegmentDispatch::new(text_segments);
+        self.update_generation_status(cx);
+        if expected_segments > 1 {
+            self.add_log(
+                cx,
+                &format!(
+                    "[INFO] [tts] Long text split into {} generation segments",
+                    expected_segments
+                ),
+            );
+        }
+
+        let send_result = self.send_next_pending_tts_segment(cx);
 
         if send_result {
-            self.add_log(cx, "[INFO] [tts] Prompt sent to TTS engine");
+            self.add_log(cx, "[INFO] [tts] Prompt segment sent to TTS engine");
         } else {
             self.add_log(cx, "[ERROR] [tts] Failed to send prompt to Dora");
             self.clear_pending_generation_snapshot();
@@ -21298,49 +22171,38 @@ impl TTSScreen {
                 ),
             );
         } else {
-            let playback_samples = self.effective_audio_samples().to_vec();
-            if playback_samples.is_empty() {
+            if self.effective_audio_samples().is_empty() {
                 self.add_log(cx, "[WARN] [tts] No audio to play");
                 self.update_player_bar(cx);
                 return;
             }
 
-            // Check if we're resuming from a paused state or starting fresh
             let effective_rate = self.effective_audio_sample_rate();
-            let total_duration = playback_samples.len() as f64 / effective_rate as f64;
+            if effective_rate == 0 {
+                self.add_log(cx, "[WARN] [tts] Invalid audio sample rate");
+                self.update_player_bar(cx);
+                return;
+            }
+
+            let total_duration =
+                self.effective_audio_samples().len() as f64 / effective_rate as f64;
             let is_resuming =
                 self.audio_playing_time > 0.1 && self.audio_playing_time < (total_duration - 0.1);
-
-            if let Some(player) = &self.audio_player {
-                // Always stop and clear buffer first to avoid audio overlap
-                player.stop();
-
+            let start_time = if is_resuming {
+                self.audio_playing_time
+            } else {
+                0.0
+            };
+            if self.start_playback_from_time(cx, start_time) {
                 if is_resuming {
-                    // Resume from paused position - write remaining audio from current position
-                    let current_sample_index =
-                        (self.audio_playing_time * effective_rate as f64) as usize;
-                    if current_sample_index < playback_samples.len() {
-                        let remaining_samples = &playback_samples[current_sample_index..];
-                        player.write_audio(remaining_samples);
-                        player.resume();
-                        self.add_log(
-                            cx,
-                            &format!(
-                                "[INFO] [tts] Resuming playback from {:.1}s",
-                                self.audio_playing_time
-                            ),
-                        );
-                    }
+                    self.add_log(
+                        cx,
+                        &format!("[INFO] [tts] Resuming playback from {:.1}s", start_time),
+                    );
                 } else {
-                    // Start from beginning
-                    player.write_audio(&playback_samples);
-                    player.resume();
-                    self.audio_playing_time = 0.0;
-                    self.update_playback_progress(cx);
                     self.add_log(cx, "[INFO] [tts] Playing audio...");
                 }
             }
-            self.tts_status = TTSStatus::Playing;
         }
         self.update_player_bar(cx);
     }
@@ -21353,16 +22215,8 @@ impl TTSScreen {
             self.tts_status = TTSStatus::Ready;
             self.add_log(cx, "[INFO] [tts] Playback stopped");
         }
-        // Reset progress
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .audio_player_bar
-                    .playback_controls
-                    .progress_row
-                    .current_time
-            ))
-            .set_text(cx, "00:00");
+        self.audio_playing_time = 0.0;
+        self.update_playback_progress(cx);
         self.update_player_bar(cx);
     }
 
@@ -22391,7 +23245,93 @@ impl TTSScreen {
             );
     }
 
-    fn update_settings_tabs(&mut self, _cx: &mut Cx) {}
+    fn update_settings_tabs(&mut self, cx: &mut Cx) {
+        let emotion_supported = self.tts_instruct_supported();
+        let show_popover = self.tts_settings_open;
+        let show_emotion = show_popover && emotion_supported;
+        let dark_mode = self.dark_mode;
+        let active = if show_popover { 1.0 } else { 0.0 };
+
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .settings_flyout
+            ))
+            .set_visible(cx, show_popover);
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .settings_flyout
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .settings_flyout
+                    .emotion_row
+            ))
+            .set_visible(cx, show_emotion);
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .settings_flyout
+                    .instruct_section
+            ))
+            .set_visible(cx, show_emotion);
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .settings_flyout
+                    .param_controls
+            ))
+            .set_visible(cx, show_popover);
+
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_content
+                    .bottom_bar
+                    .action_row
+                    .settings_popover_btn
+            ))
+            .apply_over(cx, live! { draw_bg: { active: (active), dark_mode: (dark_mode) } draw_text: { active: (active), dark_mode: (dark_mode) } });
+    }
 
     fn update_user_settings_tabs(&mut self, cx: &mut Cx) {
         let general_active = if self.user_settings_tab == 0 {
@@ -22650,7 +23590,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .instruct_section
                     .instruct_editor
                     .instruct_input
@@ -22678,7 +23618,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .emotion_row
                     .emotion_label
             ))
@@ -22686,37 +23626,37 @@ impl TTSScreen {
 
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_neutral_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_neutral_btn
             ))
             .set_text(cx, neutral.label(english));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_happy_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_happy_btn
             ))
             .set_text(cx, happy.label(english));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_angry_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_angry_btn
             ))
             .set_text(cx, angry.label(english));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_sad_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_sad_btn
             ))
             .set_text(cx, sad.label(english));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_gentle_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_gentle_btn
             ))
             .set_text(cx, gentle.label(english));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_excited_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_excited_btn
             ))
             .set_text(cx, excited.label(english));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_custom_status
             ))
             .set_text(cx, self.tr("自定义", "Custom"));
 
@@ -22759,47 +23699,47 @@ impl TTSScreen {
 
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_neutral_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_neutral_btn
             ))
             .apply_over(cx, live! { draw_bg: { active: (neutral_active), dark_mode: (dark_mode) } draw_text: { active: (neutral_active), dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_happy_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_happy_btn
             ))
             .apply_over(cx, live! { draw_bg: { active: (happy_active), dark_mode: (dark_mode) } draw_text: { active: (happy_active), dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_angry_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_angry_btn
             ))
             .apply_over(cx, live! { draw_bg: { active: (angry_active), dark_mode: (dark_mode) } draw_text: { active: (angry_active), dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_sad_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_sad_btn
             ))
             .apply_over(cx, live! { draw_bg: { active: (sad_active), dark_mode: (dark_mode) } draw_text: { active: (sad_active), dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_gentle_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_gentle_btn
             ))
             .apply_over(cx, live! { draw_bg: { active: (gentle_active), dark_mode: (dark_mode) } draw_text: { active: (gentle_active), dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_excited_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_excited_btn
             ))
             .apply_over(cx, live! { draw_bg: { active: (excited_active), dark_mode: (dark_mode) } draw_text: { active: (excited_active), dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_custom_status
             ))
             .set_visible(cx, custom_active > 0.0);
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_custom_status
             ))
             .set_enabled(cx, false);
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.emotion_row.emotion_options.emotion_custom_status
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.emotion_row.emotion_options.emotion_custom_status
             ))
             .apply_over(cx, live! { draw_bg: { active: (custom_active), dark_mode: (dark_mode) } draw_text: { active: (custom_active), dark_mode: (dark_mode) } });
 
@@ -22827,6 +23767,7 @@ impl TTSScreen {
         if !supported {
             self.tts_instruct_state.collapse();
         }
+        let show_emotion = supported && self.tts_settings_open;
         self.view
             .view(ids!(
                 content_wrapper
@@ -22836,10 +23777,10 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .emotion_row
             ))
-            .set_visible(cx, supported);
+            .set_visible(cx, show_emotion);
         self.view
             .view(ids!(
                 content_wrapper
@@ -22849,10 +23790,11 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .instruct_section
             ))
-            .set_visible(cx, supported);
+            .set_visible(cx, show_emotion);
+        self.update_settings_tabs(cx);
     }
 
     fn update_tts_instruct_controls(&mut self, cx: &mut Cx) {
@@ -22902,37 +23844,37 @@ impl TTSScreen {
 
         self.view
             .view(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_summary_row
             ))
             .set_visible(cx, !expanded);
         self.view
             .label(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.instruct_summary
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_summary_row.instruct_summary
             ))
             .set_text(cx, &summary);
         self.view
             .label(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.instruct_summary
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_summary_row.instruct_summary
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.edit_instruct_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_summary_row.edit_instruct_btn
             ))
             .set_text(cx, self.tr("编辑指令", "Edit instruction"));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_summary_row.edit_instruct_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_summary_row.edit_instruct_btn
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
         self.view
             .view(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor
             ))
             .set_visible(cx, expanded && self.tts_instruct_supported());
         self.view
             .text_input(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_input
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input
             ))
             .apply_over(
                 cx,
@@ -22948,27 +23890,27 @@ impl TTSScreen {
             );
         self.view
             .label(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
             ))
             .set_text(cx, &count_text);
         self.view
             .label(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
             ))
             .set_visible(cx, count >= 180);
         self.view
             .label(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_editor_footer.instruct_char_count
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode), over_limit: (over_limit) } });
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
             ))
             .set_text(cx, self.tr("收起", "Collapse"));
         self.view
             .button(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.bottom_bar.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_editor_footer.collapse_instruct_btn
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } });
     }
@@ -23013,7 +23955,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .speed_row
                     .speed_header
@@ -23029,7 +23971,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .pitch_row
                     .pitch_header
@@ -23045,7 +23987,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .volume_row
                     .volume_header
@@ -23062,7 +24004,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .speed_row
                     .speed_slider_row
@@ -23087,7 +24029,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .pitch_row
                     .pitch_slider_row
@@ -23112,7 +24054,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
-                    .bottom_bar
+                    .settings_flyout
                     .param_controls
                     .volume_row
                     .volume_slider_row
@@ -23322,6 +24264,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .input_container
                     .text_input
             ))
@@ -23336,6 +24279,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
@@ -23349,8 +24293,27 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
+                    .action_row
+                    .status_stack
                     .char_count
+            ))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_content
+                    .bottom_bar
+                    .action_row
+                    .status_stack
+                    .generation_status
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
 
@@ -25392,6 +26355,7 @@ impl TTSScreen {
                     .tts_page
                     .cards_container
                     .input_section
+                    .input_content
                     .bottom_bar
                     .model_row
             ))
@@ -25408,7 +26372,8 @@ impl TTSScreen {
                         .tts_page
                         .cards_container
                         .input_section
-                        .bottom_bar
+                        .input_content
+                    .bottom_bar
                         .model_row
                         .model_picker_btn
                 ))
@@ -25434,7 +26399,8 @@ impl TTSScreen {
                         .tts_page
                         .cards_container
                         .input_section
-                        .bottom_bar
+                        .input_content
+                    .bottom_bar
                         .model_row
                         .model_picker_btn
                 ))
@@ -26849,8 +27815,9 @@ mod tests {
     use super::{
         runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
-        tts_input_click_disposition, AppPage, DownloadFormat, RuntimeInitState,
-        TtsInputClickDisposition, TTSScreen,
+        split_tts_text_segments, tts_input_click_disposition, AppPage, DownloadFormat,
+        RuntimeInitState, TtsInputClickDisposition, TtsSegmentDispatch, TTSScreen,
+        TTS_INPUT_MAX_CHARS,
     };
 
     #[test]
@@ -26971,5 +27938,66 @@ mod tests {
             tts_input_click_disposition(false, false, false),
             TtsInputClickDisposition::CollapseSelections
         );
+    }
+
+    #[test]
+    fn long_tts_text_is_split_into_1000_character_segments() {
+        let text = "a".repeat(5_500);
+
+        let segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+
+        assert_eq!(segments.len(), 6);
+        assert!(segments
+            .iter()
+            .all(|segment| segment.chars().count() <= TTS_INPUT_MAX_CHARS));
+        assert_eq!(segments.concat(), text);
+    }
+
+    #[test]
+    fn tts_text_split_prefers_sentence_boundaries_before_limit() {
+        let first_sentence = format!("{}.", "a".repeat(800));
+        let second_sentence = "b".repeat(500);
+        let text = format!("{} {}", first_sentence, second_sentence);
+
+        let segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+
+        assert_eq!(segments, vec![first_sentence, second_sentence]);
+    }
+
+    #[test]
+    fn tts_text_split_preserves_multibyte_text_order() {
+        let text = format!("{}。{}", "你好".repeat(450), "世界".repeat(150));
+
+        let segments = split_tts_text_segments(&text, TTS_INPUT_MAX_CHARS);
+
+        assert_eq!(segments.len(), 2);
+        assert!(segments
+            .iter()
+            .all(|segment| segment.chars().count() <= TTS_INPUT_MAX_CHARS));
+        assert_eq!(segments.concat(), text);
+    }
+
+    #[test]
+    fn tts_segment_dispatch_sends_one_segment_at_a_time() {
+        let mut dispatch = TtsSegmentDispatch::new(vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ]);
+
+        assert_eq!(dispatch.take_next(), Some((1, 3, "first".to_string())));
+        assert_eq!(dispatch.take_next(), None);
+
+        dispatch.mark_received();
+        assert_eq!(dispatch.take_next(), Some((2, 3, "second".to_string())));
+        assert_eq!(dispatch.take_next(), None);
+
+        dispatch.mark_received();
+        assert_eq!(dispatch.take_next(), Some((3, 3, "third".to_string())));
+        assert_eq!(dispatch.take_next(), None);
+
+        dispatch.mark_received();
+        assert!(dispatch.is_complete());
+        assert_eq!(dispatch.take_next(), None);
     }
 }
