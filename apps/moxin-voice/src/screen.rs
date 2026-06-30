@@ -1946,11 +1946,49 @@ live_design! {
                         input_container = <ScrollYView> {
                             width: Fill, height: Fill
                             flow: Down
-                            padding: {left: 24, right: 24, top: 24, bottom: 92}
+                            padding: {left: 24, right: 18, top: 24, bottom: 92}
+                            scroll_bars: <ScrollBars> {
+                                show_scroll_x: false
+                                show_scroll_y: true
+                                scroll_bar_y: {
+                                    bar_size: 8.0
+                                    bar_side_margin: 6.0
+                                    min_handle_size: 32.0
+                                    smoothing: 0.15
+                                    draw_bg: {
+                                        instance dark_mode: 0.0
+                                        uniform border_radius: 4.0
+                                        fn pixel(self) -> vec4 {
+                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                            if self.is_vertical > 0.5 {
+                                                sdf.box(
+                                                    1.0,
+                                                    self.rect_size.y * self.norm_scroll,
+                                                    self.rect_size.x - 2.0,
+                                                    self.rect_size.y * self.norm_handle,
+                                                    self.border_radius
+                                                );
+                                            } else {
+                                                sdf.box(
+                                                    self.rect_size.x * self.norm_scroll,
+                                                    1.0,
+                                                    self.rect_size.x * self.norm_handle,
+                                                    self.rect_size.y - 2.0,
+                                                    self.border_radius
+                                                );
+                                            }
+                                            let base = mix(vec4(0.58, 0.64, 0.72, 0.95), vec4(0.45, 0.52, 0.62, 0.95), self.dark_mode);
+                                            let hover_color = mix(vec4(0.42, 0.48, 0.58, 1.0), vec4(0.58, 0.66, 0.78, 1.0), self.dark_mode);
+                                            sdf.fill(mix(base, hover_color, self.hover));
+                                            return sdf.result;
+                                        }
+                                    }
+                                }
+                            }
 
                             text_input = <TextInput> {
                                 width: Fill, height: Fit
-                                padding: {left: 0, right: 0, top: 0, bottom: 0}
+                                padding: {left: 0, right: 20, top: 0, bottom: 0}
                                 empty_text: "请输入要转换的文本..."
                                 text: "复杂的问题背后也许没有统一的答案，选择站在正方还是反方，其实取决于你对一系列价值判断的回答。"
 
@@ -13837,7 +13875,7 @@ impl TTSScreen {
 
     fn primary_click_abs(event: &Event) -> Option<DVec2> {
         match event {
-            Event::MouseUp(mu) => Some(mu.abs),
+            Event::MouseDown(md) if md.button.is_primary() => Some(md.abs),
             _ => None,
         }
     }
@@ -27815,10 +27853,14 @@ mod tests {
     use super::{
         runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
-        split_tts_text_segments, tts_input_click_disposition, AppPage, DownloadFormat,
+        split_tts_text_segments, tts_input_click_disposition, AppPage, DownloadFormat, Event,
         RuntimeInitState, TtsInputClickDisposition, TtsSegmentDispatch, TTSScreen,
         TTS_INPUT_MAX_CHARS,
     };
+    use makepad_widgets::{
+        Area, DVec2, KeyModifiers, MouseButton, MouseDownEvent, MouseUpEvent, WindowId,
+    };
+    use std::cell::Cell;
 
     #[test]
     fn runtime_download_ui_hidden_during_normal_startup() {
@@ -27938,6 +27980,29 @@ mod tests {
             tts_input_click_disposition(false, false, false),
             TtsInputClickDisposition::CollapseSelections
         );
+    }
+
+    #[test]
+    fn tts_input_selection_clicks_are_started_on_mouse_down_not_mouse_up() {
+        let abs = DVec2 { x: 12.0, y: 34.0 };
+        let mouse_down = Event::MouseDown(MouseDownEvent {
+            abs,
+            button: MouseButton::PRIMARY,
+            window_id: WindowId(0, 0),
+            modifiers: KeyModifiers::default(),
+            handled: Cell::new(Area::Empty),
+            time: 0.0,
+        });
+        let mouse_up = Event::MouseUp(MouseUpEvent {
+            abs,
+            button: MouseButton::PRIMARY,
+            window_id: WindowId(0, 0),
+            modifiers: KeyModifiers::default(),
+            time: 0.0,
+        });
+
+        assert_eq!(TTSScreen::primary_click_abs(&mouse_down), Some(abs));
+        assert_eq!(TTSScreen::primary_click_abs(&mouse_up), None);
     }
 
     #[test]
