@@ -318,6 +318,49 @@ fn get_project_tts_models() -> Vec<TtsModelOption> {
 
 const TTS_INPUT_MAX_CHARS: usize = 1000;
 
+#[derive(Clone, Debug, Default)]
+struct TtsSegmentDispatch {
+    segments: Vec<String>,
+    next_to_send: usize,
+    received: usize,
+}
+
+impl TtsSegmentDispatch {
+    fn new(segments: Vec<String>) -> Self {
+        Self {
+            segments,
+            next_to_send: 0,
+            received: 0,
+        }
+    }
+
+    fn take_next(&mut self) -> Option<(usize, usize, String)> {
+        if self.next_to_send != self.received || self.next_to_send >= self.segments.len() {
+            return None;
+        }
+
+        let index = self.next_to_send;
+        self.next_to_send += 1;
+        Some((index + 1, self.segments.len(), self.segments[index].clone()))
+    }
+
+    fn mark_received(&mut self) {
+        if self.received < self.next_to_send {
+            self.received += 1;
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        !self.segments.is_empty() && self.received >= self.segments.len()
+    }
+
+    fn clear(&mut self) {
+        self.segments.clear();
+        self.next_to_send = 0;
+        self.received = 0;
+    }
+}
+
 fn split_tts_text_segments(text: &str, max_chars: usize) -> Vec<String> {
     if max_chars == 0 {
         return Vec::new();
@@ -2467,18 +2510,36 @@ live_design! {
                                 align: {x: 0.0, y: 0.5}
                                 spacing: 16
 
-                                // Character count
-                                char_count = <Label> {
+                                status_stack = <View> {
                                     width: Fit, height: Fit
-                                    align: {y: 0.5}
-                                    draw_text: {
-                                        instance dark_mode: 0.0
-                                        text_style: { font_size: 13.0 }
-                                        fn get_color(self) -> vec4 {
-                                            return mix((MOXIN_TEXT_MUTED), (MOXIN_TEXT_MUTED_DARK), self.dark_mode);
+                                    flow: Down
+                                    align: {x: 0.0, y: 0.5}
+                                    spacing: 0
+
+                                    // Character count
+                                    char_count = <Label> {
+                                        width: Fit, height: Fit
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 13.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((MOXIN_TEXT_MUTED), (MOXIN_TEXT_MUTED_DARK), self.dark_mode);
+                                            }
                                         }
+                                        text: "0 字符"
                                     }
-                                    text: "0 / 1,000 字符"
+
+                                    generation_status = <Label> {
+                                        width: Fit, height: 0
+                                        draw_text: {
+                                            instance dark_mode: 0.0
+                                            text_style: { font_size: 11.0 }
+                                            fn get_color(self) -> vec4 {
+                                                return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                            }
+                                        }
+                                        text: ""
+                                    }
                                 }
 
                                 <View> { width: Fill, height: 1 }
@@ -8952,6 +9013,8 @@ pub struct TTSScreen {
     #[rust]
     pending_generation_received_segments: usize,
     #[rust]
+    pending_generation_dispatch: TtsSegmentDispatch,
+    #[rust]
     has_generated_audio: bool,
 
     // Preview player for reference audio
@@ -9280,6 +9343,7 @@ impl Widget for TTSScreen {
             self.pending_generation_instruct = None;
             self.pending_generation_expected_segments = 0;
             self.pending_generation_received_segments = 0;
+            self.pending_generation_dispatch.clear();
             self.has_generated_audio = false;
             // Initialize current page — Live Translation is the primary feature
             self.current_page = AppPage::Translation;
@@ -9629,67 +9693,82 @@ impl Widget for TTSScreen {
                 }
             }
 
-            // Poll Dora Audio - store audio samples instead of auto-playing
-            if let Some(dora) = &self.dora {
+            // Poll Dora Audio - store audio samples instead of auto-playing.
+            let chunks = if let Some(dora) = &self.dora {
                 if dora.is_running() {
-                    let shared = dora.shared_dora_state();
-                    let chunks = shared.audio.drain();
-                    if !chunks.is_empty() {
-                        for audio in chunks {
-                            self.stored_audio_samples.extend(&audio.samples);
-                            self.stored_audio_sample_rate = audio.sample_rate;
-                            if self.tts_status == TTSStatus::Generating
-                                && self.pending_generation_expected_segments > 0
-                            {
-                                self.pending_generation_received_segments += 1;
-                                if self.pending_generation_expected_segments > 1 {
-                                    self.add_log(
-                                        cx,
-                                        &format!(
-                                            "[INFO] [tts] Received audio segment {}/{}",
-                                            self.pending_generation_received_segments,
-                                            self.pending_generation_expected_segments
-                                        ),
-                                    );
-                                }
-                            }
-                        }
-                        self.rebuild_processed_audio_samples();
-                        // Transition to Ready state - user must click Play
-                        if self.tts_status == TTSStatus::Generating
-                            && self.pending_generation_received_segments
-                                >= self.pending_generation_expected_segments.max(1)
-                        {
-                            let sample_count = self.effective_audio_samples().len();
-                            let effective_rate = self.effective_audio_sample_rate();
-                            let duration_secs = if effective_rate > 0 {
-                                sample_count as f32 / effective_rate as f32
-                            } else {
-                                0.0
-                            };
+                    dora.shared_dora_state().audio.drain()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            if !chunks.is_empty() {
+                for audio in chunks {
+                    self.stored_audio_samples.extend(&audio.samples);
+                    self.stored_audio_sample_rate = audio.sample_rate;
+                    if self.tts_status == TTSStatus::Generating
+                        && self.pending_generation_expected_segments > 0
+                    {
+                        self.pending_generation_dispatch.mark_received();
+                        self.pending_generation_received_segments =
+                            self.pending_generation_dispatch.received;
+                        self.update_generation_status(cx);
+                        if self.pending_generation_expected_segments > 1 {
                             self.add_log(
                                 cx,
                                 &format!(
-                                    "[INFO] [tts] Audio generated: {} samples, {:.1}s duration",
-                                    sample_count, duration_secs
+                                    "[INFO] [tts] Received audio segment {}/{}",
+                                    self.pending_generation_received_segments,
+                                    self.pending_generation_expected_segments
                                 ),
                             );
-                            self.tts_status = TTSStatus::Ready;
-                            self.audio_playing_time = 0.0;
-                            self.has_generated_audio = true;
-                            let generated_voice_id = self
-                                .pending_generation_voice_id
-                                .clone()
-                                .or_else(|| self.selected_voice_id.clone());
-                            if let Some(voice_id) = generated_voice_id {
-                                self.apply_generated_voice_to_player_bar(cx, &voice_id, None);
-                            }
-                            self.append_current_generation_to_history(cx);
-                            self.clear_pending_generation_snapshot();
-                            self.set_generate_button_loading(cx, false);
-                            self.update_player_bar(cx);
+                        }
+
+                        if !self.pending_generation_dispatch.is_complete()
+                            && !self.send_next_pending_tts_segment(cx)
+                        {
+                            self.fail_pending_tts_generation(
+                                cx,
+                                "[ERROR] [tts] Failed to send next prompt segment to Dora",
+                            );
+                            break;
                         }
                     }
+                }
+                self.rebuild_processed_audio_samples();
+                // Transition to Ready state - user must click Play
+                if self.tts_status == TTSStatus::Generating
+                    && self.pending_generation_dispatch.is_complete()
+                {
+                    let sample_count = self.effective_audio_samples().len();
+                    let effective_rate = self.effective_audio_sample_rate();
+                    let duration_secs = if effective_rate > 0 {
+                        sample_count as f32 / effective_rate as f32
+                    } else {
+                        0.0
+                    };
+                    self.add_log(
+                        cx,
+                        &format!(
+                            "[INFO] [tts] Audio generated: {} samples, {:.1}s duration",
+                            sample_count, duration_secs
+                        ),
+                    );
+                    self.tts_status = TTSStatus::Ready;
+                    self.audio_playing_time = 0.0;
+                    self.has_generated_audio = true;
+                    let generated_voice_id = self
+                        .pending_generation_voice_id
+                        .clone()
+                        .or_else(|| self.selected_voice_id.clone());
+                    if let Some(voice_id) = generated_voice_id {
+                        self.apply_generated_voice_to_player_bar(cx, &voice_id, None);
+                    }
+                    self.append_current_generation_to_history(cx);
+                    self.clear_pending_generation_snapshot();
+                    self.set_generate_button_loading(cx, false);
+                    self.update_player_bar(cx);
                 }
             }
 
@@ -17657,17 +17736,8 @@ impl TTSScreen {
 
     fn update_char_count_from_text(&mut self, cx: &mut Cx, text: &str) {
         let count = text.chars().count();
-        let segment_count = split_tts_text_segments(text, TTS_INPUT_MAX_CHARS)
-            .len()
-            .max(1);
         let label = if self.is_english() {
-            if segment_count > 1 {
-                format!("{} characters · {} segments", count, segment_count)
-            } else {
-                format!("{} characters", count)
-            }
-        } else if segment_count > 1 {
-            format!("{} 字符 · {} 段", count, segment_count)
+            format!("{} characters", count)
         } else {
             format!("{} 字符", count)
         };
@@ -17682,9 +17752,179 @@ impl TTSScreen {
                     .input_section
                     .input_content
                     .bottom_bar
+                    .action_row
+                    .status_stack
                     .char_count
             ))
             .set_text(cx, &label);
+    }
+
+    fn update_generation_status(&mut self, cx: &mut Cx) {
+        let show = self.tts_status == TTSStatus::Generating
+            && self.pending_generation_expected_segments > 0;
+        let received = self.pending_generation_received_segments;
+        let expected = self.pending_generation_expected_segments.max(1);
+        let current = if expected > 1 {
+            (received + 1).min(expected)
+        } else {
+            1
+        };
+        let label = if self.is_english() {
+            format!("Generating segment {}/{}...", current, expected)
+        } else {
+            format!("正在生成 {}/{}...", current, expected)
+        };
+
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_content
+                    .bottom_bar
+                    .action_row
+                    .status_stack
+                    .generation_status
+            ))
+            .set_text(cx, if show { label.as_str() } else { "" });
+        if show {
+            self.view
+                .view(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                ))
+                .apply_over(cx, live! { spacing: 2 });
+            self.view
+                .label(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                        .generation_status
+                ))
+                .apply_over(cx, live! { height: Fit });
+        } else {
+            self.view
+                .view(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                ))
+                .apply_over(cx, live! { spacing: 0 });
+            self.view
+                .label(ids!(
+                    content_wrapper
+                        .main_content
+                        .left_column
+                        .content_area
+                        .tts_page
+                        .cards_container
+                        .input_section
+                        .input_content
+                        .bottom_bar
+                        .action_row
+                        .status_stack
+                        .generation_status
+                ))
+                .apply_over(cx, live! { height: 0 });
+        }
+    }
+
+    fn send_next_pending_tts_segment(&mut self, cx: &mut Cx) -> bool {
+        let Some(voice_id) = self.pending_generation_voice_id.clone() else {
+            self.add_log(cx, "[ERROR] [tts] Missing pending voice for generation segment");
+            return false;
+        };
+        let Some((segment_number, total_segments, segment)) =
+            self.pending_generation_dispatch.take_next()
+        else {
+            return true;
+        };
+
+        let voice_info = self
+            .library_voices
+            .iter()
+            .find(|voice| voice.id == voice_id)
+            .cloned();
+        let prompt = self.build_tts_prompt_for_segment(&voice_id, voice_info.as_ref(), &segment);
+        let prompt_preview = if prompt.chars().count() > 100 {
+            let end: usize = prompt
+                .char_indices()
+                .nth(100)
+                .map(|(i, _)| i)
+                .unwrap_or(prompt.len());
+            format!("{}...", &prompt[..end])
+        } else {
+            prompt.clone()
+        };
+        self.add_log(
+            cx,
+            &format!(
+                "[DEBUG] Sending prompt segment {}/{}: {}",
+                segment_number, total_segments, prompt_preview
+            ),
+        );
+
+        let payload = serde_json::json!({
+            "prompt": prompt,
+            "speed": self.pending_generation_speed,
+            "pitch": self.pending_generation_pitch,
+            "volume": self.pending_generation_volume,
+            "emotion": self.pending_generation_emotion_id.clone(),
+            "instruct": self.pending_generation_instruct.clone(),
+        });
+        let payload_text = payload.to_string();
+        let sent = self
+            .dora
+            .as_ref()
+            .map(|d| d.send_prompt(&payload_text))
+            .unwrap_or(false);
+        if !sent {
+            self.add_log(
+                cx,
+                &format!(
+                    "[ERROR] [tts] Failed to send prompt segment {}/{} to Dora",
+                    segment_number, total_segments
+                ),
+            );
+        }
+        sent
+    }
+
+    fn fail_pending_tts_generation(&mut self, cx: &mut Cx, message: &str) {
+        self.add_log(cx, message);
+        self.clear_pending_generation_snapshot();
+        self.tts_status = TTSStatus::Error(message.to_string());
+        self.set_generate_button_loading(cx, false);
+        self.update_player_bar(cx);
     }
 
     fn set_generate_button_loading(&mut self, cx: &mut Cx, loading: bool) {
@@ -17794,6 +18034,7 @@ impl TTSScreen {
                 .animator_play(cx, ids!(spin.off));
         }
 
+        self.update_generation_status(cx);
         self.view.redraw(cx);
     }
 
@@ -17810,6 +18051,7 @@ impl TTSScreen {
         self.pending_generation_instruct = None;
         self.pending_generation_expected_segments = 0;
         self.pending_generation_received_segments = 0;
+        self.pending_generation_dispatch.clear();
     }
 
     fn update_audio_player_visibility(&mut self, cx: &mut Cx) {
@@ -21869,6 +22111,8 @@ impl TTSScreen {
         let expected_segments = text_segments.len();
         self.pending_generation_expected_segments = expected_segments;
         self.pending_generation_received_segments = 0;
+        self.pending_generation_dispatch = TtsSegmentDispatch::new(text_segments);
+        self.update_generation_status(cx);
         if expected_segments > 1 {
             self.add_log(
                 cx,
@@ -21879,52 +22123,10 @@ impl TTSScreen {
             );
         }
 
-        let mut send_result = true;
-        for (idx, segment) in text_segments.iter().enumerate() {
-            let prompt =
-                self.build_tts_prompt_for_segment(&voice_id, voice_info.as_ref(), segment);
-            let prompt_preview = if prompt.chars().count() > 100 {
-                let end: usize = prompt
-                    .char_indices()
-                    .nth(100)
-                    .map(|(i, _)| i)
-                    .unwrap_or(prompt.len());
-                format!("{}...", &prompt[..end])
-            } else {
-                prompt.clone()
-            };
-            self.add_log(
-                cx,
-                &format!(
-                    "[DEBUG] Sending prompt segment {}/{}: {}",
-                    idx + 1,
-                    expected_segments,
-                    prompt_preview
-                ),
-            );
-
-            let payload = serde_json::json!({
-                "prompt": prompt,
-                "speed": self.pending_generation_speed,
-                "pitch": self.pending_generation_pitch,
-                "volume": self.pending_generation_volume,
-                "emotion": self.pending_generation_emotion_id.clone(),
-                "instruct": self.pending_generation_instruct.clone(),
-            });
-            let payload_text = payload.to_string();
-            let sent = self
-                .dora
-                .as_ref()
-                .map(|d| d.send_prompt(&payload_text))
-                .unwrap_or(false);
-            if !sent {
-                send_result = false;
-                break;
-            }
-        }
+        let send_result = self.send_next_pending_tts_segment(cx);
 
         if send_result {
-            self.add_log(cx, "[INFO] [tts] Prompt sent to TTS engine");
+            self.add_log(cx, "[INFO] [tts] Prompt segment sent to TTS engine");
         } else {
             self.add_log(cx, "[ERROR] [tts] Failed to send prompt to Dora");
             self.clear_pending_generation_snapshot();
@@ -24093,7 +24295,25 @@ impl TTSScreen {
                     .input_section
                     .input_content
                     .bottom_bar
+                    .action_row
+                    .status_stack
                     .char_count
+            ))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .tts_page
+                    .cards_container
+                    .input_section
+                    .input_content
+                    .bottom_bar
+                    .action_row
+                    .status_stack
+                    .generation_status
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
 
@@ -27596,7 +27816,8 @@ mod tests {
         runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
         split_tts_text_segments, tts_input_click_disposition, AppPage, DownloadFormat,
-        RuntimeInitState, TtsInputClickDisposition, TTSScreen, TTS_INPUT_MAX_CHARS,
+        RuntimeInitState, TtsInputClickDisposition, TtsSegmentDispatch, TTSScreen,
+        TTS_INPUT_MAX_CHARS,
     };
 
     #[test]
@@ -27754,5 +27975,29 @@ mod tests {
             .iter()
             .all(|segment| segment.chars().count() <= TTS_INPUT_MAX_CHARS));
         assert_eq!(segments.concat(), text);
+    }
+
+    #[test]
+    fn tts_segment_dispatch_sends_one_segment_at_a_time() {
+        let mut dispatch = TtsSegmentDispatch::new(vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ]);
+
+        assert_eq!(dispatch.take_next(), Some((1, 3, "first".to_string())));
+        assert_eq!(dispatch.take_next(), None);
+
+        dispatch.mark_received();
+        assert_eq!(dispatch.take_next(), Some((2, 3, "second".to_string())));
+        assert_eq!(dispatch.take_next(), None);
+
+        dispatch.mark_received();
+        assert_eq!(dispatch.take_next(), Some((3, 3, "third".to_string())));
+        assert_eq!(dispatch.take_next(), None);
+
+        dispatch.mark_received();
+        assert!(dispatch.is_complete());
+        assert_eq!(dispatch.take_next(), None);
     }
 }
