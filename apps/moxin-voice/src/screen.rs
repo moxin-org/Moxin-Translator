@@ -59,6 +59,10 @@ enum TtsInputClickDisposition {
     CollapseSelections,
 }
 
+const TTS_INPUT_DRAG_AUTOSCROLL_EDGE: f64 = 52.0;
+const TTS_INPUT_DRAG_AUTOSCROLL_MAX_DELTA: f64 = 28.0;
+const TTS_INPUT_SCROLL_TOP_PADDING: f64 = 24.0;
+
 fn tts_input_click_disposition(
     clicked_main_text_input: bool,
     clicked_main_input_container: bool,
@@ -71,6 +75,39 @@ fn tts_input_click_disposition(
     } else {
         TtsInputClickDisposition::CollapseSelections
     }
+}
+
+fn tts_input_drag_scroll_delta(
+    pointer_y: f64,
+    container_top: f64,
+    container_bottom: f64,
+    edge_band: f64,
+    max_delta: f64,
+) -> f64 {
+    if edge_band <= 0.0 || max_delta <= 0.0 || container_bottom <= container_top {
+        return 0.0;
+    }
+
+    let top_distance = pointer_y - container_top;
+    if top_distance <= edge_band {
+        let proximity = ((edge_band - top_distance) / edge_band).clamp(0.0, 1.0);
+        return -max_delta * proximity;
+    }
+
+    let bottom_distance = container_bottom - pointer_y;
+    if bottom_distance <= edge_band {
+        let proximity = ((edge_band - bottom_distance) / edge_band).clamp(0.0, 1.0);
+        return max_delta * proximity;
+    }
+
+    0.0
+}
+
+fn tts_input_drag_release_should_restore_focus(
+    was_drag_selecting_from_input: bool,
+    selected_text_len: usize,
+) -> bool {
+    was_drag_selecting_from_input && selected_text_len > 0
 }
 
 #[derive(Clone, Debug)]
@@ -9196,6 +9233,14 @@ pub struct TTSScreen {
     #[rust]
     tts_slider_dragging: Option<TtsParamSliderKind>,
     #[rust]
+    tts_input_drag_selecting: bool,
+    #[rust]
+    tts_input_drag_pointer_abs: Option<DVec2>,
+    #[rust]
+    tts_input_drag_scroll_y: f64,
+    #[rust]
+    tts_input_drag_scroll_frame: NextFrame,
+    #[rust]
     tts_settings_open: bool,
 
     // Global settings modal
@@ -9346,6 +9391,7 @@ impl Widget for TTSScreen {
             self.view.handle_event(cx, event, scope);
         });
         self.handle_tts_input_selection_click(cx, event);
+        self.handle_tts_input_drag_autoscroll(cx, event);
 
         // Initialize audio player (24kHz = Qwen3-TTS native output rate)
         if self.audio_player.is_none() {
@@ -9427,6 +9473,10 @@ impl Widget for TTSScreen {
             self.tts_volume = 100.0;
             self.tts_instruct_state = TtsInstructState::default();
             self.tts_slider_dragging = None;
+            self.tts_input_drag_selecting = false;
+            self.tts_input_drag_pointer_abs = None;
+            self.tts_input_drag_scroll_y = 0.0;
+            self.tts_input_drag_scroll_frame = NextFrame::default();
             self.tts_settings_open = false;
             self.controls_panel_tab = 1;
             self.apply_controls_panel_tab_visibility(cx);
@@ -13795,6 +13845,35 @@ impl Widget for TTSScreen {
 }
 
 impl TTSScreen {
+    fn tts_main_input(&self) -> TextInputRef {
+        self.view.text_input(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .tts_page
+                .cards_container
+                .input_section
+                .input_content
+                .input_container
+                .text_input
+        ))
+    }
+
+    fn tts_main_input_container(&self) -> ViewRef {
+        self.view.view(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .tts_page
+                .cards_container
+                .input_section
+                .input_content
+                .input_container
+        ))
+    }
+
     fn handle_tts_input_selection_click(&mut self, cx: &mut Cx, event: &Event) {
         if self.current_page != AppPage::TextToSpeech {
             return;
@@ -13804,32 +13883,8 @@ impl TTSScreen {
             return;
         };
 
-        let main_input = self.view.text_input(ids!(
-            content_wrapper
-                .main_content
-                .left_column
-                .content_area
-                .tts_page
-                .cards_container
-                .input_section
-                .input_content
-                    .input_container
-                .text_input
-        ));
-        let main_container_area = self
-            .view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .tts_page
-                    .cards_container
-                    .input_section
-                    .input_content
-                    .input_container
-            ))
-            .area();
+        let main_input = self.tts_main_input();
+        let main_container_area = self.tts_main_input_container().area();
         let instruct_input = self.view.text_input(ids!(
             content_wrapper
                 .main_content
@@ -13871,6 +13926,97 @@ impl TTSScreen {
                 Self::collapse_text_input_selection(cx, &instruct_input);
             }
         }
+    }
+
+    fn handle_tts_input_drag_autoscroll(&mut self, cx: &mut Cx, event: &Event) {
+        if self.current_page != AppPage::TextToSpeech {
+            self.tts_input_drag_selecting = false;
+            self.tts_input_drag_pointer_abs = None;
+            return;
+        }
+
+        match event {
+            Event::MouseDown(md)
+                if md.button.is_primary()
+                    && self.tts_main_input().area().rect(cx).contains(md.abs) =>
+            {
+                let input_container = self.tts_main_input_container();
+                let main_input = self.tts_main_input();
+                self.tts_input_drag_selecting = true;
+                self.tts_input_drag_pointer_abs = Some(md.abs);
+                self.tts_input_drag_scroll_y =
+                    Self::current_tts_input_scroll_y(cx, &input_container, &main_input);
+            }
+            Event::MouseMove(mm) if self.tts_input_drag_selecting => {
+                self.tts_input_drag_pointer_abs = Some(mm.abs);
+                self.step_tts_input_drag_autoscroll(cx);
+            }
+            Event::MouseUp(mu) if mu.button.is_primary() => {
+                let main_input = self.tts_main_input();
+                let should_restore_focus = tts_input_drag_release_should_restore_focus(
+                    self.tts_input_drag_selecting,
+                    main_input.selected_text().len(),
+                );
+                self.tts_input_drag_selecting = false;
+                self.tts_input_drag_pointer_abs = None;
+                if should_restore_focus {
+                    main_input.set_key_focus(cx);
+                }
+            }
+            _ if self
+                .tts_input_drag_scroll_frame
+                .is_event(event)
+                .is_some()
+                && self.tts_input_drag_selecting =>
+            {
+                self.step_tts_input_drag_autoscroll(cx);
+            }
+            _ => {}
+        }
+    }
+
+    fn current_tts_input_scroll_y(
+        cx: &Cx,
+        input_container: &ViewRef,
+        main_input: &TextInputRef,
+    ) -> f64 {
+        let container_rect = input_container.area().rect(cx);
+        let input_rect = main_input.area().rect(cx);
+        (container_rect.pos.y + TTS_INPUT_SCROLL_TOP_PADDING - input_rect.pos.y).max(0.0)
+    }
+
+    fn step_tts_input_drag_autoscroll(&mut self, cx: &mut Cx) {
+        let Some(pointer_abs) = self.tts_input_drag_pointer_abs else {
+            return;
+        };
+
+        let input_container = self.tts_main_input_container();
+        let container_rect = input_container.area().rect(cx);
+        let delta = tts_input_drag_scroll_delta(
+            pointer_abs.y,
+            container_rect.pos.y,
+            container_rect.pos.y + container_rect.size.y,
+            TTS_INPUT_DRAG_AUTOSCROLL_EDGE,
+            TTS_INPUT_DRAG_AUTOSCROLL_MAX_DELTA,
+        );
+        if delta == 0.0 {
+            return;
+        }
+
+        let main_input = self.tts_main_input();
+        self.tts_input_drag_scroll_y = (self.tts_input_drag_scroll_y + delta).max(0.0);
+        input_container.set_scroll_pos(cx, dvec2(0.0, self.tts_input_drag_scroll_y));
+
+        if let Some(mut input) = main_input.borrow_mut() {
+            if delta > 0.0 {
+                let _ = input.move_cursor_down(cx, true);
+            } else {
+                let _ = input.move_cursor_up(cx, true);
+            }
+        }
+
+        input_container.redraw(cx);
+        self.tts_input_drag_scroll_frame = cx.new_next_frame();
     }
 
     fn primary_click_abs(event: &Event) -> Option<DVec2> {
@@ -27853,9 +27999,9 @@ mod tests {
     use super::{
         runtime_init_next_display_progress, runtime_init_progress_for_display_value,
         should_probe_translation_permission_on_page_entry, should_show_runtime_download_ui,
-        split_tts_text_segments, tts_input_click_disposition, AppPage, DownloadFormat, Event,
-        RuntimeInitState, TtsInputClickDisposition, TtsSegmentDispatch, TTSScreen,
-        TTS_INPUT_MAX_CHARS,
+        split_tts_text_segments, tts_input_click_disposition, tts_input_drag_scroll_delta,
+        AppPage, DownloadFormat, Event, RuntimeInitState, TtsInputClickDisposition,
+        TtsSegmentDispatch, TTSScreen, TTS_INPUT_MAX_CHARS,
     };
     use makepad_widgets::{
         Area, DVec2, KeyModifiers, MouseButton, MouseDownEvent, MouseUpEvent, WindowId,
@@ -28003,6 +28149,31 @@ mod tests {
 
         assert_eq!(TTSScreen::primary_click_abs(&mouse_down), Some(abs));
         assert_eq!(TTSScreen::primary_click_abs(&mouse_up), None);
+    }
+
+    #[test]
+    fn tts_input_drag_autoscroll_uses_edge_proximity() {
+        assert_eq!(
+            tts_input_drag_scroll_delta(150.0, 100.0, 500.0, 48.0, 24.0),
+            0.0
+        );
+
+        let near_top = tts_input_drag_scroll_delta(110.0, 100.0, 500.0, 48.0, 24.0);
+        let at_top = tts_input_drag_scroll_delta(100.0, 100.0, 500.0, 48.0, 24.0);
+        let near_bottom = tts_input_drag_scroll_delta(490.0, 100.0, 500.0, 48.0, 24.0);
+        let at_bottom = tts_input_drag_scroll_delta(500.0, 100.0, 500.0, 48.0, 24.0);
+
+        assert!(near_top < 0.0);
+        assert!(at_top < near_top);
+        assert!(near_bottom > 0.0);
+        assert!(at_bottom > near_bottom);
+    }
+
+    #[test]
+    fn tts_input_drag_release_keeps_focus_for_deletable_selection() {
+        assert!(super::tts_input_drag_release_should_restore_focus(true, 12));
+        assert!(!super::tts_input_drag_release_should_restore_focus(true, 0));
+        assert!(!super::tts_input_drag_release_should_restore_focus(false, 12));
     }
 
     #[test]
