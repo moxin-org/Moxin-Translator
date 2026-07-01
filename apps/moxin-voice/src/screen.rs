@@ -59,6 +59,12 @@ enum TtsInputClickDisposition {
     CollapseSelections,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TtsInputDragTarget {
+    Main,
+    Instruct,
+}
+
 const TTS_INPUT_DRAG_AUTOSCROLL_EDGE: f64 = 52.0;
 const TTS_INPUT_DRAG_AUTOSCROLL_MAX_DELTA: f64 = 28.0;
 const TTS_INPUT_SCROLL_TOP_PADDING: f64 = 24.0;
@@ -2229,10 +2235,48 @@ live_design! {
                                     spacing: 6
                                     visible: false
 
-                                    instruct_input = <TextInput> {
+                                    instruct_input_scroller = <ScrollYView> {
                                         width: Fill, height: 72
-                                        padding: {left: 10, right: 10, top: 8, bottom: 8}
-                                        empty_text: "输入希望音色采用的语气、情绪或表达方式"
+                                        flow: Down
+                                        padding: {left: 10, right: 6, top: 8, bottom: 8}
+                                        scroll_bars: <ScrollBars> {
+                                            show_scroll_x: false
+                                            show_scroll_y: true
+                                            scroll_bar_y: {
+                                                bar_size: 6.0
+                                                bar_side_margin: 4.0
+                                                min_handle_size: 24.0
+                                                smoothing: 0.15
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    uniform border_radius: 3.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        if self.is_vertical > 0.5 {
+                                                            sdf.box(
+                                                                1.0,
+                                                                self.rect_size.y * self.norm_scroll,
+                                                                self.rect_size.x - 2.0,
+                                                                self.rect_size.y * self.norm_handle,
+                                                                self.border_radius
+                                                            );
+                                                        } else {
+                                                            sdf.box(
+                                                                self.rect_size.x * self.norm_scroll,
+                                                                1.0,
+                                                                self.rect_size.x * self.norm_handle,
+                                                                self.rect_size.y - 2.0,
+                                                                self.border_radius
+                                                            );
+                                                        }
+                                                        let base = mix(vec4(0.58, 0.64, 0.72, 0.92), vec4(0.45, 0.52, 0.62, 0.92), self.dark_mode);
+                                                        let hover_color = mix(vec4(0.42, 0.48, 0.58, 1.0), vec4(0.58, 0.66, 0.78, 1.0), self.dark_mode);
+                                                        sdf.fill(mix(base, hover_color, self.hover));
+                                                        return sdf.result;
+                                                    }
+                                                }
+                                            }
+                                        }
                                         draw_bg: {
                                             instance dark_mode: 0.0
                                             instance border_radius: 6.0
@@ -2244,27 +2288,38 @@ live_design! {
                                                 return sdf.result;
                                             }
                                         }
-                                        draw_text: {
-                                            instance dark_mode: 0.0
-                                            text_style: { font_size: 12.0, line_spacing: 1.4 }
-                                            fn get_color(self) -> vec4 {
-                                                return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+
+                                        instruct_input = <TextInput> {
+                                            width: Fill, height: Fit
+                                            padding: {left: 0, right: 14, top: 0, bottom: 0}
+                                            empty_text: "输入希望音色采用的语气、情绪或表达方式"
+                                            draw_bg: {
+                                                fn pixel(self) -> vec4 {
+                                                    return vec4(0.0, 0.0, 0.0, 0.0);
+                                                }
                                             }
-                                        }
-                                        draw_cursor: {
-                                            fn pixel(self) -> vec4 {
-                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 0.5);
-                                                sdf.fill((MOXIN_PRIMARY));
-                                                return sdf.result;
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: { font_size: 12.0, line_spacing: 1.4 }
+                                                fn get_color(self) -> vec4 {
+                                                    return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                                }
                                             }
-                                        }
-                                        draw_selection: {
-                                            fn pixel(self) -> vec4 {
-                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 1.0);
-                                                sdf.fill(vec4(0.39, 0.40, 0.95, 0.2));
-                                                return sdf.result;
+                                            draw_cursor: {
+                                                fn pixel(self) -> vec4 {
+                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                    sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 0.5);
+                                                    sdf.fill((MOXIN_PRIMARY));
+                                                    return sdf.result;
+                                                }
+                                            }
+                                            draw_selection: {
+                                                fn pixel(self) -> vec4 {
+                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                    sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 1.0);
+                                                    sdf.fill(vec4(0.39, 0.40, 0.95, 0.2));
+                                                    return sdf.result;
+                                                }
                                             }
                                         }
                                     }
@@ -2781,10 +2836,48 @@ live_design! {
                                     spacing: 6
                                     visible: false
 
-                                    instruct_input = <TextInput> {
+                                    instruct_input_scroller = <ScrollYView> {
                                         width: Fill, height: 72
-                                        padding: {left: 10, right: 10, top: 8, bottom: 8}
-                                        empty_text: "输入希望音色采用的语气、情绪或表达方式"
+                                        flow: Down
+                                        padding: {left: 10, right: 6, top: 8, bottom: 8}
+                                        scroll_bars: <ScrollBars> {
+                                            show_scroll_x: false
+                                            show_scroll_y: true
+                                            scroll_bar_y: {
+                                                bar_size: 6.0
+                                                bar_side_margin: 4.0
+                                                min_handle_size: 24.0
+                                                smoothing: 0.15
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    uniform border_radius: 3.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        if self.is_vertical > 0.5 {
+                                                            sdf.box(
+                                                                1.0,
+                                                                self.rect_size.y * self.norm_scroll,
+                                                                self.rect_size.x - 2.0,
+                                                                self.rect_size.y * self.norm_handle,
+                                                                self.border_radius
+                                                            );
+                                                        } else {
+                                                            sdf.box(
+                                                                self.rect_size.x * self.norm_scroll,
+                                                                1.0,
+                                                                self.rect_size.x * self.norm_handle,
+                                                                self.rect_size.y - 2.0,
+                                                                self.border_radius
+                                                            );
+                                                        }
+                                                        let base = mix(vec4(0.58, 0.64, 0.72, 0.92), vec4(0.45, 0.52, 0.62, 0.92), self.dark_mode);
+                                                        let hover_color = mix(vec4(0.42, 0.48, 0.58, 1.0), vec4(0.58, 0.66, 0.78, 1.0), self.dark_mode);
+                                                        sdf.fill(mix(base, hover_color, self.hover));
+                                                        return sdf.result;
+                                                    }
+                                                }
+                                            }
+                                        }
                                         draw_bg: {
                                             instance dark_mode: 0.0
                                             instance border_radius: 6.0
@@ -2796,27 +2889,38 @@ live_design! {
                                                 return sdf.result;
                                             }
                                         }
-                                        draw_text: {
-                                            instance dark_mode: 0.0
-                                            text_style: { font_size: 12.0, line_spacing: 1.4 }
-                                            fn get_color(self) -> vec4 {
-                                                return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+
+                                        instruct_input = <TextInput> {
+                                            width: Fill, height: Fit
+                                            padding: {left: 0, right: 14, top: 0, bottom: 0}
+                                            empty_text: "输入希望音色采用的语气、情绪或表达方式"
+                                            draw_bg: {
+                                                fn pixel(self) -> vec4 {
+                                                    return vec4(0.0, 0.0, 0.0, 0.0);
+                                                }
                                             }
-                                        }
-                                        draw_cursor: {
-                                            fn pixel(self) -> vec4 {
-                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 0.5);
-                                                sdf.fill((MOXIN_PRIMARY));
-                                                return sdf.result;
+                                            draw_text: {
+                                                instance dark_mode: 0.0
+                                                text_style: { font_size: 12.0, line_spacing: 1.4 }
+                                                fn get_color(self) -> vec4 {
+                                                    return mix((TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                                }
                                             }
-                                        }
-                                        draw_selection: {
-                                            fn pixel(self) -> vec4 {
-                                                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 1.0);
-                                                sdf.fill(vec4(0.39, 0.40, 0.95, 0.2));
-                                                return sdf.result;
+                                            draw_cursor: {
+                                                fn pixel(self) -> vec4 {
+                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                    sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 0.5);
+                                                    sdf.fill((MOXIN_PRIMARY));
+                                                    return sdf.result;
+                                                }
+                                            }
+                                            draw_selection: {
+                                                fn pixel(self) -> vec4 {
+                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                    sdf.box(0.0, 0.0, self.rect_size.x, self.rect_size.y, 1.0);
+                                                    sdf.fill(vec4(0.39, 0.40, 0.95, 0.2));
+                                                    return sdf.result;
+                                                }
                                             }
                                         }
                                     }
@@ -9239,6 +9343,8 @@ pub struct TTSScreen {
     #[rust]
     tts_input_drag_scroll_y: f64,
     #[rust]
+    tts_input_drag_target: Option<TtsInputDragTarget>,
+    #[rust]
     tts_input_drag_scroll_frame: NextFrame,
     #[rust]
     tts_settings_open: bool,
@@ -9476,6 +9582,7 @@ impl Widget for TTSScreen {
             self.tts_input_drag_selecting = false;
             self.tts_input_drag_pointer_abs = None;
             self.tts_input_drag_scroll_y = 0.0;
+            self.tts_input_drag_target = None;
             self.tts_input_drag_scroll_frame = NextFrame::default();
             self.tts_settings_open = false;
             self.controls_panel_tab = 1;
@@ -10912,7 +11019,7 @@ impl Widget for TTSScreen {
         if let Some(changed_text) = self
             .view
             .text_input(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input_scroller.instruct_input
             ))
             .changed(&actions)
         {
@@ -13874,6 +13981,39 @@ impl TTSScreen {
         ))
     }
 
+    fn tts_instruct_input(&self) -> TextInputRef {
+        self.view.text_input(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .tts_page
+                .cards_container
+                .input_section
+                .settings_flyout
+                .instruct_section
+                .instruct_editor
+                .instruct_input_scroller
+                .instruct_input
+        ))
+    }
+
+    fn tts_instruct_input_container(&self) -> ViewRef {
+        self.view.view(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .tts_page
+                .cards_container
+                .input_section
+                .settings_flyout
+                .instruct_section
+                .instruct_editor
+                .instruct_input_scroller
+        ))
+    }
+
     fn handle_tts_input_selection_click(&mut self, cx: &mut Cx, event: &Event) {
         if self.current_page != AppPage::TextToSpeech {
             return;
@@ -13885,19 +14025,7 @@ impl TTSScreen {
 
         let main_input = self.tts_main_input();
         let main_container_area = self.tts_main_input_container().area();
-        let instruct_input = self.view.text_input(ids!(
-            content_wrapper
-                .main_content
-                .left_column
-                .content_area
-                .tts_page
-                .cards_container
-                .input_section
-                .settings_flyout
-                    .instruct_section
-                .instruct_editor
-                .instruct_input
-        ));
+        let instruct_input = self.tts_instruct_input();
 
         let clicked_main_input = main_input.area().rect(cx).contains(click_abs);
         let clicked_main_container = main_container_area.rect(cx).contains(click_abs);
@@ -13932,6 +14060,7 @@ impl TTSScreen {
         if self.current_page != AppPage::TextToSpeech {
             self.tts_input_drag_selecting = false;
             self.tts_input_drag_pointer_abs = None;
+            self.tts_input_drag_target = None;
             return;
         }
 
@@ -13946,21 +14075,35 @@ impl TTSScreen {
                 self.tts_input_drag_pointer_abs = Some(md.abs);
                 self.tts_input_drag_scroll_y =
                     Self::current_tts_input_scroll_y(cx, &input_container, &main_input);
+                self.tts_input_drag_target = Some(TtsInputDragTarget::Main);
+            }
+            Event::MouseDown(md)
+                if md.button.is_primary()
+                    && self.tts_instruct_input().area().rect(cx).contains(md.abs) =>
+            {
+                let input_container = self.tts_instruct_input_container();
+                let instruct_input = self.tts_instruct_input();
+                self.tts_input_drag_selecting = true;
+                self.tts_input_drag_pointer_abs = Some(md.abs);
+                self.tts_input_drag_scroll_y =
+                    Self::current_tts_input_scroll_y(cx, &input_container, &instruct_input);
+                self.tts_input_drag_target = Some(TtsInputDragTarget::Instruct);
             }
             Event::MouseMove(mm) if self.tts_input_drag_selecting => {
                 self.tts_input_drag_pointer_abs = Some(mm.abs);
                 self.step_tts_input_drag_autoscroll(cx);
             }
             Event::MouseUp(mu) if mu.button.is_primary() => {
-                let main_input = self.tts_main_input();
+                let active_input = self.active_tts_input_drag_input();
                 let should_restore_focus = tts_input_drag_release_should_restore_focus(
                     self.tts_input_drag_selecting,
-                    main_input.selected_text().len(),
+                    active_input.selected_text().len(),
                 );
                 self.tts_input_drag_selecting = false;
                 self.tts_input_drag_pointer_abs = None;
+                self.tts_input_drag_target = None;
                 if should_restore_focus {
-                    main_input.set_key_focus(cx);
+                    active_input.set_key_focus(cx);
                 }
             }
             _ if self
@@ -13972,6 +14115,20 @@ impl TTSScreen {
                 self.step_tts_input_drag_autoscroll(cx);
             }
             _ => {}
+        }
+    }
+
+    fn active_tts_input_drag_input(&self) -> TextInputRef {
+        match self.tts_input_drag_target {
+            Some(TtsInputDragTarget::Instruct) => self.tts_instruct_input(),
+            _ => self.tts_main_input(),
+        }
+    }
+
+    fn active_tts_input_drag_container(&self) -> ViewRef {
+        match self.tts_input_drag_target {
+            Some(TtsInputDragTarget::Instruct) => self.tts_instruct_input_container(),
+            _ => self.tts_main_input_container(),
         }
     }
 
@@ -13990,7 +14147,7 @@ impl TTSScreen {
             return;
         };
 
-        let input_container = self.tts_main_input_container();
+        let input_container = self.active_tts_input_drag_container();
         let container_rect = input_container.area().rect(cx);
         let delta = tts_input_drag_scroll_delta(
             pointer_abs.y,
@@ -14003,11 +14160,11 @@ impl TTSScreen {
             return;
         }
 
-        let main_input = self.tts_main_input();
+        let input = self.active_tts_input_drag_input();
         self.tts_input_drag_scroll_y = (self.tts_input_drag_scroll_y + delta).max(0.0);
         input_container.set_scroll_pos(cx, dvec2(0.0, self.tts_input_drag_scroll_y));
 
-        if let Some(mut input) = main_input.borrow_mut() {
+        if let Some(mut input) = input.borrow_mut() {
             if delta > 0.0 {
                 let _ = input.move_cursor_down(cx, true);
             } else {
@@ -18911,7 +19068,7 @@ impl TTSScreen {
         self.tts_instruct_state.collapse();
         self.view
             .text_input(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input_scroller.instruct_input
             ))
             .set_text(cx, self.tts_instruct_state.text());
         self.update_tts_emotion_controls(cx);
@@ -23778,6 +23935,7 @@ impl TTSScreen {
                     .settings_flyout
                     .instruct_section
                     .instruct_editor
+                    .instruct_input_scroller
                     .instruct_input
             ))
             .set_text(cx, self.tts_instruct_state.text());
@@ -24058,8 +24216,19 @@ impl TTSScreen {
             ))
             .set_visible(cx, expanded && self.tts_instruct_supported());
         self.view
+            .view(ids!(
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input_scroller
+            ))
+            .apply_over(
+                cx,
+                live! {
+                    draw_bg: { dark_mode: (dark_mode) }
+                    scroll_bars: { scroll_bar_y: { draw_bg: { dark_mode: (dark_mode) } } }
+                },
+            );
+        self.view
             .text_input(ids!(
-                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input
+                content_wrapper.main_content.left_column.content_area.tts_page.cards_container.input_section.settings_flyout.instruct_section.instruct_editor.instruct_input_scroller.instruct_input
             ))
             .apply_over(
                 cx,
@@ -24069,7 +24238,6 @@ impl TTSScreen {
                     } else {
                         "输入希望音色采用的语气、情绪或表达方式"
                     })
-                    draw_bg: { dark_mode: (dark_mode) }
                     draw_text: { dark_mode: (dark_mode) }
                 },
             );
@@ -28175,6 +28343,34 @@ mod tests {
         assert!(super::tts_input_drag_release_should_restore_focus(true, 12));
         assert!(!super::tts_input_drag_release_should_restore_focus(true, 0));
         assert!(!super::tts_input_drag_release_should_restore_focus(false, 12));
+    }
+
+    #[test]
+    fn tts_instruct_inputs_are_vertically_scrollable() {
+        let live_design = include_str!("screen.rs")
+            .split("#[derive(Live, LiveHook, Widget)]")
+            .next()
+            .unwrap();
+        let input_count = live_design
+            .matches(concat!("instruct", "_input = <TextInput>"))
+            .count();
+        let scroll_container_count = live_design
+            .matches(concat!("instruct", "_input_scroller = <ScrollYView>"))
+            .count();
+
+        assert_eq!(input_count, 2);
+        assert_eq!(scroll_container_count, input_count);
+    }
+
+    #[test]
+    fn tts_instruct_input_is_wired_for_drag_autoscroll() {
+        let source = include_str!("screen.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+
+        assert!(source.contains("tts_instruct_input().area().rect(cx).contains(md.abs)"));
+        assert!(source.contains("TtsInputDragTarget::Instruct"));
     }
 
     #[test]
