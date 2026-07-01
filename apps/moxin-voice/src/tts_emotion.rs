@@ -32,9 +32,10 @@ impl TtsInstructState {
             return Self::default();
         }
 
-        if let Some(preset) = EMOTION_PRESETS.iter().find(|preset| {
-            preset.instruct_zh == Some(instruct) || preset.instruct_en == Some(instruct)
-        }) {
+        if let Some(preset) = EMOTION_PRESETS
+            .iter()
+            .find(|preset| preset.matches_instruct(instruct))
+        {
             return Self {
                 selection: TtsInstructSelection::Preset(preset.id),
                 text: instruct.to_string(),
@@ -134,6 +135,12 @@ impl TtsEmotionPreset {
             self.instruct_zh
         }
     }
+
+    fn matches_instruct(&self, instruct: &str) -> bool {
+        self.instruct_zh == Some(instruct)
+            || self.instruct_en == Some(instruct)
+            || legacy_preset_instructs(self.id).contains(&instruct)
+    }
 }
 
 pub const EMOTION_PRESETS: &[TtsEmotionPreset] = &[
@@ -148,40 +155,55 @@ pub const EMOTION_PRESETS: &[TtsEmotionPreset] = &[
         id: "happy",
         label_zh: "开心",
         label_en: "Happy",
-        instruct_zh: Some("用开心、轻快的语气说"),
-        instruct_en: Some("Say it in a happy and lively tone"),
+        instruct_zh: Some("体现非常开心兴奋的语气，声音明亮有笑意，音调明显上扬，语速轻快，像终于见到很想念的人时忍不住笑着说话。"),
+        instruct_en: Some("Deliver it with an unmistakably happy and excited performance: bright smiling voice, clearly rising pitch, brisk pace, as if happily greeting someone you have missed."),
     },
     TtsEmotionPreset {
         id: "angry",
         label_zh: "愤怒",
         label_en: "Angry",
-        instruct_zh: Some("用极其愤怒、严厉斥责、情绪爆发的语气说，语调强烈，咬字有力"),
-        instruct_en: Some(
-            "Use an extremely angry, stern, emotionally explosive tone, with forceful intonation and articulation.",
-        ),
+        instruct_zh: Some("体现非常愤怒压抑的语气，音量偏大，咬字很重，语速偏快，重音明显，语气短促有压迫感，像在强烈质问。"),
+        instruct_en: Some("Deliver it with an unmistakably angry and forceful performance: louder voice, hard articulation, faster pace, strong stress, short pressuring phrasing, as if strongly questioning someone."),
     },
     TtsEmotionPreset {
         id: "sad",
         label_zh: "难过",
         label_en: "Sad",
-        instruct_zh: Some("用难过、低落的语气说"),
-        instruct_en: Some("Say it in a sad and subdued tone"),
+        instruct_zh: Some("体现非常悲伤委屈的语气，声音低落发颤，语速缓慢，有明显哭腔和哽咽，句子中带停顿，像快要哭出来。"),
+        instruct_en: Some("Deliver it with an unmistakably sad and hurt performance: low trembling voice, slow pace, audible tearful tone and catches in the throat, with pauses as if about to cry."),
     },
     TtsEmotionPreset {
         id: "gentle",
         label_zh: "温柔",
         label_en: "Gentle",
-        instruct_zh: Some("用温柔、平静的语气说"),
-        instruct_en: Some("Say it in a gentle and calm tone"),
+        instruct_zh: Some("体现温柔安抚的语气，声音柔和靠前，音量适中，语速平稳偏慢，重音轻，像在耐心安慰对方。"),
+        instruct_en: Some("Deliver it with a gentle reassuring performance: soft close voice, moderate volume, steady slightly slow pace, light stress, as if patiently comforting someone."),
     },
     TtsEmotionPreset {
         id: "excited",
         label_zh: "兴奋",
         label_en: "Excited",
-        instruct_zh: Some("用兴奋、充满活力的语气说"),
-        instruct_en: Some("Say it in an excited and energetic tone"),
+        instruct_zh: Some("体现非常兴奋期待的语气，声音明亮有冲劲，音调起伏更大，语速偏快，重音积极，像迫不及待分享好消息。"),
+        instruct_en: Some("Deliver it with a very excited and anticipatory performance: bright energetic voice, wider pitch movement, faster pace, upbeat stress, as if eager to share good news."),
     },
 ];
+
+fn legacy_preset_instructs(id: &str) -> &'static [&'static str] {
+    match id {
+        "happy" => &["用开心、轻快的语气说", "Say it in a happy and lively tone"],
+        "angry" => &[
+            "用极其愤怒、严厉斥责、情绪爆发的语气说，语调强烈，咬字有力",
+            "Use an extremely angry, stern, emotionally explosive tone, with forceful intonation and articulation.",
+        ],
+        "sad" => &["用难过、低落的语气说", "Say it in a sad and subdued tone"],
+        "gentle" => &["用温柔、平静的语气说", "Say it in a gentle and calm tone"],
+        "excited" => &[
+            "用兴奋、充满活力的语气说",
+            "Say it in an excited and energetic tone",
+        ],
+        _ => &[],
+    }
+}
 
 pub fn emotion_preset(id: &str) -> Option<&'static TtsEmotionPreset> {
     EMOTION_PRESETS.iter().find(|preset| preset.id == id)
@@ -199,10 +221,30 @@ pub fn instruct_for_request<'a>(
     state: &'a TtsInstructState,
     backend: &str,
     is_builtin_voice: bool,
+    text: &str,
 ) -> Option<&'a str> {
-    supports_custom_voice_instruct(backend, is_builtin_voice)
-        .then(|| state.effective_instruct())
-        .flatten()
+    if !supports_custom_voice_instruct(backend, is_builtin_voice) {
+        return None;
+    }
+
+    if text_prefers_chinese_instruct(text) {
+        if let TtsInstructSelection::Preset(id) = state.selection() {
+            if let Some(instruct) = emotion_preset(id).and_then(|preset| preset.instruct(false)) {
+                return Some(instruct);
+            }
+        }
+    }
+
+    state.effective_instruct()
+}
+
+fn text_prefers_chinese_instruct(text: &str) -> bool {
+    text.chars().any(|ch| {
+        matches!(
+            ch,
+            '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}'
+        )
+    })
 }
 
 pub fn selection_for_request(
@@ -243,7 +285,14 @@ mod tests {
 
         assert_eq!(preset.label(false), "开心");
         assert_eq!(preset.label(true), "Happy");
-        assert_eq!(preset.instruct(false), Some("用开心、轻快的语气说"));
+        assert_eq!(
+            preset.instruct(false),
+            Some("体现非常开心兴奋的语气，声音明亮有笑意，音调明显上扬，语速轻快，像终于见到很想念的人时忍不住笑着说话。")
+        );
+        assert_eq!(
+            preset.instruct(true),
+            Some("Deliver it with an unmistakably happy and excited performance: bright smiling voice, clearly rising pitch, brisk pace, as if happily greeting someone you have missed.")
+        );
     }
 
     #[test]
@@ -252,13 +301,41 @@ mod tests {
 
         assert_eq!(
             angry.instruct(false),
-            Some("用极其愤怒、严厉斥责、情绪爆发的语气说，语调强烈，咬字有力")
+            Some("体现非常愤怒压抑的语气，音量偏大，咬字很重，语速偏快，重音明显，语气短促有压迫感，像在强烈质问。")
         );
         assert_eq!(
             angry.instruct(true),
             Some(
-                "Use an extremely angry, stern, emotionally explosive tone, with forceful intonation and articulation."
+                "Deliver it with an unmistakably angry and forceful performance: louder voice, hard articulation, faster pace, strong stress, short pressuring phrasing, as if strongly questioning someone."
             )
+        );
+    }
+
+    #[test]
+    fn strong_preset_instructs_match_the_approved_performance_descriptions() {
+        assert_eq!(
+            emotion_preset("sad").unwrap().instruct(false),
+            Some("体现非常悲伤委屈的语气，声音低落发颤，语速缓慢，有明显哭腔和哽咽，句子中带停顿，像快要哭出来。")
+        );
+        assert_eq!(
+            emotion_preset("sad").unwrap().instruct(true),
+            Some("Deliver it with an unmistakably sad and hurt performance: low trembling voice, slow pace, audible tearful tone and catches in the throat, with pauses as if about to cry.")
+        );
+        assert_eq!(
+            emotion_preset("gentle").unwrap().instruct(false),
+            Some("体现温柔安抚的语气，声音柔和靠前，音量适中，语速平稳偏慢，重音轻，像在耐心安慰对方。")
+        );
+        assert_eq!(
+            emotion_preset("gentle").unwrap().instruct(true),
+            Some("Deliver it with a gentle reassuring performance: soft close voice, moderate volume, steady slightly slow pace, light stress, as if patiently comforting someone.")
+        );
+        assert_eq!(
+            emotion_preset("excited").unwrap().instruct(false),
+            Some("体现非常兴奋期待的语气，声音明亮有冲劲，音调起伏更大，语速偏快，重音积极，像迫不及待分享好消息。")
+        );
+        assert_eq!(
+            emotion_preset("excited").unwrap().instruct(true),
+            Some("Deliver it with a very excited and anticipatory performance: bright energetic voice, wider pitch movement, faster pace, upbeat stress, as if eager to share good news.")
         );
     }
 
@@ -267,11 +344,11 @@ mod tests {
         let mut state = TtsInstructState::default();
 
         state.select_preset("happy", false);
+        assert_eq!(state.selection(), TtsInstructSelection::Preset("happy"));
         assert_eq!(
-            state.selection(),
-            TtsInstructSelection::Preset("happy")
+            state.text(),
+            "体现非常开心兴奋的语气，声音明亮有笑意，音调明显上扬，语速轻快，像终于见到很想念的人时忍不住笑着说话。"
         );
-        assert_eq!(state.text(), "用开心、轻快的语气说");
 
         state.edit("请带着克制但明显的喜悦说".to_string());
         assert_eq!(state.selection(), TtsInstructSelection::Custom);
@@ -294,12 +371,24 @@ mod tests {
     #[test]
     fn history_matches_any_localized_preset_variant() {
         assert_eq!(
-            TtsInstructState::from_history(Some("Say it in a happy and lively tone")),
+            TtsInstructState::from_history(Some("Deliver it with an unmistakably happy and excited performance: bright smiling voice, clearly rising pitch, brisk pace, as if happily greeting someone you have missed.")),
             TtsInstructState::from_preset("happy", true)
         );
         assert_eq!(
-            TtsInstructState::from_history(Some("用开心、轻快的语气说")).selection(),
+            TtsInstructState::from_history(Some("体现非常开心兴奋的语气，声音明亮有笑意，音调明显上扬，语速轻快，像终于见到很想念的人时忍不住笑着说话。")).selection(),
             TtsInstructSelection::Preset("happy")
+        );
+    }
+
+    #[test]
+    fn history_still_matches_legacy_short_preset_instructs() {
+        assert_eq!(
+            TtsInstructState::from_history(Some("Say it in a happy and lively tone")).selection(),
+            TtsInstructSelection::Preset("happy")
+        );
+        assert_eq!(
+            TtsInstructState::from_history(Some("用难过、低落的语气说")).selection(),
+            TtsInstructSelection::Preset("sad")
         );
     }
 
@@ -308,13 +397,51 @@ mod tests {
         let state = TtsInstructState::from_preset("happy", false);
 
         assert_eq!(
-            instruct_for_request(&state, "qwen3_tts_mlx", true),
-            Some("用开心、轻快的语气说")
+            instruct_for_request(&state, "qwen3_tts_mlx", true, "Hello there"),
+            Some("体现非常开心兴奋的语气，声音明亮有笑意，音调明显上扬，语速轻快，像终于见到很想念的人时忍不住笑着说话。")
         );
-        assert_eq!(instruct_for_request(&state, "primespeech", true), None);
         assert_eq!(
-            instruct_for_request(&state, "qwen3_tts_mlx", false),
+            instruct_for_request(&state, "primespeech", true, "Hello there"),
             None
+        );
+        assert_eq!(
+            instruct_for_request(&state, "qwen3_tts_mlx", false, "Hello there"),
+            None
+        );
+    }
+
+    #[test]
+    fn preset_request_prefers_chinese_instruct_for_chinese_text() {
+        let state = TtsInstructState::from_preset("happy", true);
+
+        assert_eq!(
+            state.text(),
+            "Deliver it with an unmistakably happy and excited performance: bright smiling voice, clearly rising pitch, brisk pace, as if happily greeting someone you have missed."
+        );
+        assert_eq!(
+            instruct_for_request(
+                &state,
+                "qwen3_tts_mlx",
+                true,
+                "复杂的问题背后也许没有统一的答案"
+            ),
+            Some("体现非常开心兴奋的语气，声音明亮有笑意，音调明显上扬，语速轻快，像终于见到很想念的人时忍不住笑着说话。")
+        );
+    }
+
+    #[test]
+    fn custom_request_keeps_custom_instruct_for_chinese_text() {
+        let mut state = TtsInstructState::default();
+        state.edit("Say this with restrained but clear delight.".to_string());
+
+        assert_eq!(
+            instruct_for_request(
+                &state,
+                "qwen3_tts_mlx",
+                true,
+                "复杂的问题背后也许没有统一的答案"
+            ),
+            Some("Say this with restrained but clear delight.")
         );
     }
 
@@ -367,7 +494,7 @@ mod tests {
             TtsInstructSelection::Neutral
         );
         assert_eq!(
-            TtsInstructState::from_history(Some("Say it in a sad and subdued tone")).selection(),
+            TtsInstructState::from_history(Some("Deliver it with an unmistakably sad and hurt performance: low trembling voice, slow pace, audible tearful tone and catches in the throat, with pauses as if about to cry.")).selection(),
             TtsInstructSelection::Preset("sad")
         );
         assert_eq!(

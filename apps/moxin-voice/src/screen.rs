@@ -22205,6 +22205,7 @@ impl TTSScreen {
             &self.tts_instruct_state,
             &self.app_preferences.inference_backend,
             is_builtin_voice,
+            &text,
         )
         .map(str::to_string);
         let request_selection = tts_emotion::selection_for_request(
