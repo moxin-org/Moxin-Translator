@@ -51,40 +51,51 @@
 //! ```
 
 // Phase 2 - Audio widgets
+pub mod aec_button;
 pub mod led_meter;
 pub mod mic_button;
-pub mod aec_button;
 
 // Phase 3 - Chat widgets
-pub mod chat_panel;
 pub mod chat_input;
+pub mod chat_panel;
 pub mod log_panel;
 
 // Phase 4 - Config widgets
-pub mod role_editor;
 pub mod dataflow_picker;
 pub mod provider_selector;
+pub mod role_editor;
 
 // Phase 5 - Hero widgets
 pub mod moxin_hero;
 
 // Re-export Phase 2 widgets
-pub use led_meter::{LedMeter, LedMeterRef, LedMeterWidgetExt, LedColors};
-pub use mic_button::{MicButton, MicButtonRef, MicButtonWidgetExt, MicButtonAction};
-pub use aec_button::{AecButton, AecButtonRef, AecButtonWidgetExt, AecButtonAction};
+pub use aec_button::{AecButton, AecButtonAction, AecButtonRef, AecButtonWidgetExt};
+pub use led_meter::{LedColors, LedMeter, LedMeterRef, LedMeterWidgetExt};
+pub use mic_button::{MicButton, MicButtonAction, MicButtonRef, MicButtonWidgetExt};
 
 // Re-export Phase 3 widgets
-pub use chat_panel::{ChatPanel, ChatPanelRef, ChatPanelWidgetExt, ChatPanelAction, ChatMessage};
-pub use chat_input::{ChatInput, ChatInputRef, ChatInputWidgetExt, ChatInputAction};
-pub use log_panel::{MoxinLogPanel, MoxinLogPanelRef, MoxinLogPanelWidgetExt, LogPanelAction, LogLevel, LogNode};
+pub use chat_input::{ChatInput, ChatInputAction, ChatInputRef, ChatInputWidgetExt};
+pub use chat_panel::{ChatMessage, ChatPanel, ChatPanelAction, ChatPanelRef, ChatPanelWidgetExt};
+pub use log_panel::{
+    LogLevel, LogNode, LogPanelAction, MoxinLogPanel, MoxinLogPanelRef, MoxinLogPanelWidgetExt,
+};
 
 // Re-export Phase 4 widgets
-pub use role_editor::{RoleEditor, RoleEditorRef, RoleEditorWidgetExt, RoleEditorAction, RoleConfig};
-pub use dataflow_picker::{DataflowPicker, DataflowPickerRef, DataflowPickerWidgetExt, DataflowPickerAction};
-pub use provider_selector::{ProviderSelector, ProviderSelectorRef, ProviderSelectorWidgetExt, ProviderSelectorAction, ProviderInfo};
+pub use dataflow_picker::{
+    DataflowPicker, DataflowPickerAction, DataflowPickerRef, DataflowPickerWidgetExt,
+};
+pub use provider_selector::{
+    ProviderInfo, ProviderSelector, ProviderSelectorAction, ProviderSelectorRef,
+    ProviderSelectorWidgetExt,
+};
+pub use role_editor::{
+    RoleConfig, RoleEditor, RoleEditorAction, RoleEditorRef, RoleEditorWidgetExt,
+};
 
 // Re-export Phase 5 widgets (Hero)
-pub use moxin_hero::{MoxinHero, MoxinHeroRef, MoxinHeroWidgetExt, MoxinHeroAction, ConnectionStatus};
+pub use moxin_hero::{
+    ConnectionStatus, MoxinHero, MoxinHeroAction, MoxinHeroRef, MoxinHeroWidgetExt,
+};
 
 use makepad_widgets::Cx;
 

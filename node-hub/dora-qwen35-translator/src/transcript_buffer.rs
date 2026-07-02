@@ -118,7 +118,10 @@ mod tests {
 
         assert_eq!(state.buffer(), "好，我叫鲍月，然后来自华为，现在也是。");
         assert_eq!(state.stable_buffer(), "");
-        assert_eq!(state.active_burst_text(), "好，我叫鲍月，然后来自华为，现在也是。");
+        assert_eq!(
+            state.active_burst_text(),
+            "好，我叫鲍月，然后来自华为，现在也是。"
+        );
     }
 
     #[test]

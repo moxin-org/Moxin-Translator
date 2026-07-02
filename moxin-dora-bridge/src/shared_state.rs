@@ -452,14 +452,16 @@ impl AudioState {
             tracing::info!("🔇 Force mute set (instant audio silencing)");
         }
         // Also set should_clear for backwards compatibility with UI polling
-        self.should_clear.store(true, std::sync::atomic::Ordering::Release);
+        self.should_clear
+            .store(true, std::sync::atomic::Ordering::Release);
         self.clear();
     }
 
     /// Check and reset the clear signal (UI calls this)
     /// Returns true if buffer should be cleared, resets flag
     pub fn take_clear_signal(&self) -> bool {
-        self.should_clear.swap(false, std::sync::atomic::Ordering::AcqRel)
+        self.should_clear
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
     }
 }
 
@@ -722,12 +724,12 @@ impl SharedDoraState {
                     translation: DirtyValue::default(),
                     translation_window_visible: DirtyValue::new(false),
                     translation_input_device: DirtyValue::new(None),
-                    translation_overlay_fullscreen: DirtyValue::new(false),
+                    translation_overlay_fullscreen: DirtyValue::new(true),
                     translation_overlay_opacity: DirtyValue::new(1.0),
                     translation_locale_en: DirtyValue::new(false),
                     translation_lang_pair: DirtyValue::new(("zh".to_string(), "en".to_string())),
-                    translation_font_size_preset: DirtyValue::new("normal".to_string()),
-                    translation_footer_font_size_preset: DirtyValue::new("10".to_string()),
+                    translation_font_size_preset: DirtyValue::new("24".to_string()),
+                    translation_footer_font_size_preset: DirtyValue::new("20".to_string()),
                     translation_anchor_position_preset: DirtyValue::new("50".to_string()),
                     translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
                     translation_overlay_status: DirtyValue::new("warming".to_string()),
@@ -749,12 +751,12 @@ impl SharedDoraState {
             translation: DirtyValue::default(),
             translation_window_visible: DirtyValue::new(false),
             translation_input_device: DirtyValue::new(None),
-            translation_overlay_fullscreen: DirtyValue::new(false),
+            translation_overlay_fullscreen: DirtyValue::new(true),
             translation_overlay_opacity: DirtyValue::new(1.0),
             translation_locale_en: DirtyValue::new(false),
             translation_lang_pair: DirtyValue::new(("zh".to_string(), "en".to_string())),
-            translation_font_size_preset: DirtyValue::new("normal".to_string()),
-            translation_footer_font_size_preset: DirtyValue::new("10".to_string()),
+            translation_font_size_preset: DirtyValue::new("24".to_string()),
+            translation_footer_font_size_preset: DirtyValue::new("20".to_string()),
             translation_anchor_position_preset: DirtyValue::new("50".to_string()),
             translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
             translation_overlay_status: DirtyValue::new("warming".to_string()),
@@ -811,12 +813,12 @@ impl Default for SharedDoraState {
             translation: DirtyValue::default(),
             translation_window_visible: DirtyValue::new(false),
             translation_input_device: DirtyValue::new(None),
-            translation_overlay_fullscreen: DirtyValue::new(false),
+            translation_overlay_fullscreen: DirtyValue::new(true),
             translation_overlay_opacity: DirtyValue::new(1.0),
             translation_locale_en: DirtyValue::new(false),
             translation_lang_pair: DirtyValue::new(("zh".to_string(), "en".to_string())),
-            translation_font_size_preset: DirtyValue::new("normal".to_string()),
-            translation_footer_font_size_preset: DirtyValue::new("10".to_string()),
+            translation_font_size_preset: DirtyValue::new("24".to_string()),
+            translation_footer_font_size_preset: DirtyValue::new("20".to_string()),
             translation_anchor_position_preset: DirtyValue::new("50".to_string()),
             translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
             translation_overlay_status: DirtyValue::new("warming".to_string()),

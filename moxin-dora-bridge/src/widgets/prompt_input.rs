@@ -385,9 +385,10 @@ impl DoraBridge for PromptInputBridge {
                     "Unknown output '{}' with data type {}",
                     output, data_type_name
                 );
-                return Err(BridgeError::NotSupported(
-                    format!("Output '{}' not supported by PromptInputBridge", output)
-                ));
+                return Err(BridgeError::NotSupported(format!(
+                    "Output '{}' not supported by PromptInputBridge",
+                    output
+                )));
             }
         }
 

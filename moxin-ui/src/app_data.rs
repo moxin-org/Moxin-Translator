@@ -49,10 +49,10 @@
 //! }
 //! ```
 
-use std::sync::Arc;
-use moxin_dora_bridge::SharedDoraState;
 use crate::registry::MoxinWidgetRegistry;
 use crate::theme::MoxinTheme;
+use moxin_dora_bridge::SharedDoraState;
+use std::sync::Arc;
 
 /// Application configuration
 #[derive(Clone, Debug, Default)]

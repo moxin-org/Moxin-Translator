@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# macos_bootstrap.sh — Qwen3-only, no conda/Python required.
+# macos_bootstrap.sh — translator-only, no conda/Python required.
 #
 # Model download is handled by the bundled `moxin-init` Rust binary.
 # It defaults to automatic source selection: ModelScope first when reachable,
@@ -11,16 +11,11 @@
 set -euo pipefail
 
 APP_RESOURCES="${MOXIN_APP_RESOURCES:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-STATE_PATH="${MOXIN_BOOTSTRAP_STATE_PATH:-$HOME/Library/Logs/MoxinVoice/bootstrap_state.txt}"
+STATE_PATH="${MOXIN_BOOTSTRAP_STATE_PATH:-$HOME/Library/Logs/MoxinTranslator/bootstrap_state.txt}"
 
-QWEN_ROOT="${QWEN3_TTS_MODEL_ROOT:-$HOME/.OminiX/models/qwen3-tts-mlx}"
-QWEN_CUSTOM_DIR="${QWEN3_TTS_CUSTOMVOICE_MODEL_DIR:-$QWEN_ROOT/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit}"
-QWEN_BASE_DIR="${QWEN3_TTS_BASE_MODEL_DIR:-$QWEN_ROOT/Qwen3-TTS-12Hz-1.7B-Base-8bit}"
 QWEN_ASR_DIR="${QWEN3_ASR_MODEL_PATH:-$HOME/.OminiX/models/qwen3-asr-1.7b}"
 QWEN35_TRANSLATOR_DIR="${QWEN35_TRANSLATOR_MODEL_PATH:-$HOME/.OminiX/models/Qwen3.5-2B-MLX-4bit}"
 
-QWEN_CUSTOM_REPO="${QWEN3_TTS_CUSTOMVOICE_REPO:-mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit}"
-QWEN_BASE_REPO="${QWEN3_TTS_BASE_REPO:-mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit}"
 QWEN_ASR_REPO="${QWEN3_ASR_REPO:-mlx-community/Qwen3-ASR-1.7B-8bit}"
 QWEN35_TRANSLATOR_REPO="${QWEN35_TRANSLATOR_REPO:-mlx-community/Qwen3.5-2B-MLX-4bit}"
 
@@ -45,9 +40,8 @@ if ! MOXIN_INIT="$(resolve_moxin_init)"; then
   exit 1
 fi
 
-echo "=== Moxin Voice Bootstrap (moxin-init) ==="
+echo "=== Moxin Translator Bootstrap (moxin-init) ==="
 echo "moxin-init: $MOXIN_INIT"
-echo "Qwen TTS root: $QWEN_ROOT"
 echo "ASR model dir: $QWEN_ASR_DIR"
 echo "Qwen3.5 translator dir: $QWEN35_TRANSLATOR_DIR"
 echo ""
@@ -70,11 +64,6 @@ if [[ -n "$HF_ENDPOINT_VALUE" ]]; then
     MOXIN_BOOTSTRAP_STATE_PATH="$STATE_PATH" \
     MOXIN_MODEL_PROVIDER="$MODEL_PROVIDER_VALUE" \
     MOXIN_MODELSCOPE_ENDPOINT="$MODELSCOPE_ENDPOINT_VALUE" \
-    QWEN3_TTS_MODEL_ROOT="$QWEN_ROOT" \
-    QWEN3_TTS_CUSTOMVOICE_MODEL_DIR="$QWEN_CUSTOM_DIR" \
-    QWEN3_TTS_CUSTOMVOICE_REPO="$QWEN_CUSTOM_REPO" \
-    QWEN3_TTS_BASE_MODEL_DIR="$QWEN_BASE_DIR" \
-    QWEN3_TTS_BASE_REPO="$QWEN_BASE_REPO" \
     QWEN3_ASR_MODEL_PATH="$QWEN_ASR_DIR" \
     QWEN3_ASR_REPO="$QWEN_ASR_REPO" \
     QWEN35_TRANSLATOR_MODEL_PATH="$QWEN35_TRANSLATOR_DIR" \
@@ -86,11 +75,6 @@ else
     MOXIN_BOOTSTRAP_STATE_PATH="$STATE_PATH" \
     MOXIN_MODEL_PROVIDER="$MODEL_PROVIDER_VALUE" \
     MOXIN_MODELSCOPE_ENDPOINT="$MODELSCOPE_ENDPOINT_VALUE" \
-    QWEN3_TTS_MODEL_ROOT="$QWEN_ROOT" \
-    QWEN3_TTS_CUSTOMVOICE_MODEL_DIR="$QWEN_CUSTOM_DIR" \
-    QWEN3_TTS_CUSTOMVOICE_REPO="$QWEN_CUSTOM_REPO" \
-    QWEN3_TTS_BASE_MODEL_DIR="$QWEN_BASE_DIR" \
-    QWEN3_TTS_BASE_REPO="$QWEN_BASE_REPO" \
     QWEN3_ASR_MODEL_PATH="$QWEN_ASR_DIR" \
     QWEN3_ASR_REPO="$QWEN_ASR_REPO" \
     QWEN35_TRANSLATOR_MODEL_PATH="$QWEN35_TRANSLATOR_DIR" \

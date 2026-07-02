@@ -241,21 +241,22 @@ fn format_commit_prompt_debug(system_prompt: &str, user_prompt: &str) -> String 
 fn strip_hard_cut_terminal_punctuation(chunk: &str) -> String {
     let trimmed = chunk.trim_end();
     let mut out = trimmed.to_string();
-    if matches!(out.chars().last(), Some('。' | '.' | '！' | '!' | '？' | '?')) {
+    if matches!(
+        out.chars().last(),
+        Some('。' | '.' | '！' | '!' | '？' | '?')
+    ) {
         out.pop();
     }
     out
 }
 
 fn find_commit_boundary_from_tail(text: &str) -> Option<usize> {
-    text.char_indices()
-        .rev()
-        .find_map(|(idx, ch)| match ch {
-            '，' | ',' | '。' | '.' | '！' | '!' | '？' | '?' | '；' | ';' => {
-                Some(idx + ch.len_utf8())
-            }
-            _ => None,
-        })
+    text.char_indices().rev().find_map(|(idx, ch)| match ch {
+        '，' | ',' | '。' | '.' | '！' | '!' | '？' | '?' | '；' | ';' => {
+            Some(idx + ch.len_utf8())
+        }
+        _ => None,
+    })
 }
 
 fn should_emit_streaming(
@@ -560,7 +561,10 @@ fn commit_passthrough(
         }
         Err(e) => {
             tracing::error!("[passthrough] Failed to consume stable prefix: {e}");
-            let _ = send_log(node, &format!("[passthrough] Failed to consume stable prefix: {e}"));
+            let _ = send_log(
+                node,
+                &format!("[passthrough] Failed to consume stable prefix: {e}"),
+            );
             false
         }
     }
@@ -585,10 +589,7 @@ fn handle_translation_response(
         Ok(output) => output,
         Err(e) => {
             tracing::error!("Translation generation failed: {e}");
-            let _ = send_log(
-                node,
-                &format!("Translation generation failed: {e}"),
-            );
+            let _ = send_log(node, &format!("Translation generation failed: {e}"));
             return false;
         }
     };
@@ -619,7 +620,10 @@ fn handle_translation_response(
         }
         Err(e) => {
             tracing::error!("Failed to consume committed stable prefix: {e}");
-            let _ = send_log(node, &format!("Failed to consume committed stable prefix: {e}"));
+            let _ = send_log(
+                node,
+                &format!("Failed to consume committed stable prefix: {e}"),
+            );
             false
         }
     }
@@ -758,8 +762,14 @@ fn main() -> Result<()> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(STOP_DRAIN_TIMEOUT_MS_DEFAULT);
     if passthrough {
-        tracing::info!("Translator running in passthrough mode (no LLM); src={}", src_lang);
-        let _ = send_log(&mut node, "Translator passthrough mode — no translation will be generated");
+        tracing::info!(
+            "Translator running in passthrough mode (no LLM); src={}",
+            src_lang
+        );
+        let _ = send_log(
+            &mut node,
+            "Translator passthrough mode — no translation will be generated",
+        );
     } else {
         tracing::info!("Translation: {} → {}", src_lang, tgt_lang);
     }
@@ -904,21 +914,22 @@ fn main() -> Result<()> {
                             _ => None,
                         })
                         .unwrap_or("progressive");
-                    let segment_reason = metadata
-                        .parameters
-                        .get("segment_reason")
-                        .and_then(|p| match p {
-                            dora_node_api::Parameter::String(v) => Some(v.as_str()),
-                            _ => None,
-                        });
+                    let segment_reason =
+                        metadata
+                            .parameters
+                            .get("segment_reason")
+                            .and_then(|p| match p {
+                                dora_node_api::Parameter::String(v) => Some(v.as_str()),
+                                _ => None,
+                            });
 
                     let arr = match data.as_any().downcast_ref::<StringArray>() {
                         Some(a) if a.len() > 0 => a,
                         _ => continue,
                     };
                     let chunk = arr.value(0).trim().to_string();
-                    let chunk_is_usable = !chunk.is_empty()
-                        && !should_drop_low_info_chunk(&chunk, &src_lang);
+                    let chunk_is_usable =
+                        !chunk.is_empty() && !should_drop_low_info_chunk(&chunk, &src_lang);
 
                     if chunk_is_usable {
                         tracing::info!(
@@ -1134,8 +1145,8 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_system_prompt, find_commit_boundary_from_tail, format_commit_prompt_debug,
-        build_session_meta, should_trigger_idle_flush, stop_drain_timed_out,
+        build_session_meta, build_system_prompt, find_commit_boundary_from_tail,
+        format_commit_prompt_debug, should_trigger_idle_flush, stop_drain_timed_out,
         strip_hard_cut_terminal_punctuation,
     };
     use std::time::{Duration, Instant};

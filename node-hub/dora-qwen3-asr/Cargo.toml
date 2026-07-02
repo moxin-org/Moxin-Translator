@@ -3,17 +3,10 @@ name = "dora-qwen3-asr"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Qwen3 ASR MLX Dora backend for Moxin Voice"
+description = "Qwen3 ASR MLX Dora backend for Moxin Translator"
 
 [dependencies]
 qwen3-asr-mlx = { git = "https://github.com/OminiX-ai/OminiX-MLX.git", rev = "6aac996db8b71fb7dae7a2409c46b4f2ade93092", package = "qwen3-asr-mlx" }
-# `mlx-sys` is needed to call `mlx_clear_cache()` after each transcription.
-# Without explicit cache release, Metal buffer pool used by KV cache during
-# autoregressive generation is not returned to the system between calls, so
-# repeated transcribes (especially any that hit the max-token cap from a
-# degenerate repetition loop) accumulate ~GB of resident memory and eventually
-# OOM. Pinned to the same rev as `qwen3-asr-mlx` to keep the workspace single-source.
-mlx-sys = { git = "https://github.com/OminiX-ai/OminiX-MLX.git", rev = "6aac996db8b71fb7dae7a2409c46b4f2ade93092", package = "mlx-sys" }
 dora-node-api = "0.4.0"
 arrow = { version = "54.2.1", default-features = false, features = ["ipc"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -22,6 +15,7 @@ anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dirs = "5.0"
+mlx-sys = { git = "https://github.com/OminiX-ai/OminiX-MLX.git", rev = "6aac996db8b71fb7dae7a2409c46b4f2ade93092", package = "mlx-sys" }
 
 [[bin]]
 name = "dora-qwen3-asr"

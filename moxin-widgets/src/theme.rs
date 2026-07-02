@@ -1,6 +1,6 @@
 //! # Theme System
 //!
-//! Centralized color palette, fonts, and dark mode support for Moxin Studio.
+//! Centralized color palette, fonts, and dark mode support for Moxin Translator.
 //!
 //! ## Usage
 //!

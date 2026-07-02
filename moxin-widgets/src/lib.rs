@@ -1,9 +1,9 @@
 //! # Moxin Widgets
 //!
-//! Shared reusable UI components for Moxin Studio applications.
+//! Shared reusable UI components for Moxin Translator.
 //!
 //! This crate provides the core widget library and plugin infrastructure for building
-//! Moxin Studio apps using the [Makepad](https://github.com/makepad/makepad) UI framework.
+//! Moxin Translator using the [Makepad](https://github.com/makepad/makepad) UI framework.
 //!
 //! ## Quick Start
 //!
@@ -85,7 +85,10 @@ pub mod translation_overlay;
 pub mod waveform_view;
 
 // Re-export app trait types for convenience
-pub use app_trait::{AppInfo, AppRegistry, MoxinApp, PageId, PageRouter, StateChangeListener, TimerControl, tab_clicked};
+pub use app_trait::{
+    tab_clicked, AppInfo, AppRegistry, MoxinApp, PageId, PageRouter, StateChangeListener,
+    TimerControl,
+};
 
 use makepad_widgets::Cx;
 

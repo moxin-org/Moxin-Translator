@@ -108,7 +108,8 @@ impl TranslationDisplayState {
             return false;
         };
         let Some(translation) = self.pending_completed_translations.remove(&commit_id) else {
-            self.pending_completed_sources.insert(commit_id, source_text);
+            self.pending_completed_sources
+                .insert(commit_id, source_text);
             return false;
         };
 
@@ -228,7 +229,11 @@ impl TranslationListenerBridge {
                                 .iter()
                                 .find(|(k, _)| k.as_str() == "session_status")
                                 .and_then(|(_, v)| {
-                                    if let Parameter::String(s) = v { Some(s.clone()) } else { None }
+                                    if let Parameter::String(s) = v {
+                                        Some(s.clone())
+                                    } else {
+                                        None
+                                    }
                                 })
                                 .unwrap_or_else(|| "streaming".to_string());
                             let commit_id = metadata
@@ -245,9 +250,7 @@ impl TranslationListenerBridge {
 
                             debug!(
                                 "[TranslationListener] source_text ({}, commit_id={:?}): {}",
-                                session_status,
-                                commit_id,
-                                &text
+                                session_status, commit_id, &text
                             );
 
                             display.handle_source_text(
@@ -474,12 +477,8 @@ mod tests {
         state.handle_source_text("complete", "旧句".to_string(), Some(1), 50);
         state.handle_source_text("streaming", "新句，后半段".to_string(), None, 50);
 
-        let completed = state.handle_translation_complete(
-            "old translation".to_string(),
-            Some(1),
-            None,
-            50,
-        );
+        let completed =
+            state.handle_translation_complete("old translation".to_string(), Some(1), None, 50);
         assert!(completed);
 
         assert_eq!(state.history.len(), 1);
@@ -495,12 +494,8 @@ mod tests {
         state.handle_source_text("streaming", "同一句".to_string(), None, 50);
         state.handle_source_text("complete", "同一句".to_string(), Some(7), 50);
 
-        let completed = state.handle_translation_complete(
-            "same translation".to_string(),
-            Some(7),
-            None,
-            50,
-        );
+        let completed =
+            state.handle_translation_complete("same translation".to_string(), Some(7), None, 50);
         assert!(completed);
 
         assert!(state.pending_source_text.is_empty());
@@ -527,7 +522,8 @@ mod tests {
         assert_eq!(state.history[0].translation, "old translation");
         assert_eq!(state.pending_source_text, "新句，后半段");
 
-        let completed_again = state.handle_source_text("complete", "旧句".to_string(), Some(11), 50);
+        let completed_again =
+            state.handle_source_text("complete", "旧句".to_string(), Some(11), 50);
         assert!(!completed_again);
         assert_eq!(state.history.len(), 1);
     }

@@ -114,7 +114,9 @@ impl DoraBridge for AudioInputBridge {
                 *state.write() = BridgeState::Connected;
                 running.store(true, Ordering::SeqCst);
 
-                info!("[AudioInputBridge] Worker thread started - staying alive for send operations");
+                info!(
+                    "[AudioInputBridge] Worker thread started - staying alive for send operations"
+                );
 
                 // No event loop needed - audio sending happens synchronously via send() method
                 // Just keep thread alive until disconnect() is called
@@ -138,11 +140,17 @@ impl DoraBridge for AudioInputBridge {
         while start.elapsed() < connection_timeout {
             match *self.state.read() {
                 BridgeState::Connected => {
-                    info!("[AudioInputBridge] Connection verified in {:?}", start.elapsed());
+                    info!(
+                        "[AudioInputBridge] Connection verified in {:?}",
+                        start.elapsed()
+                    );
                     return Ok(());
                 }
                 BridgeState::Error => {
-                    error!("[AudioInputBridge] Connection failed after {:?}", start.elapsed());
+                    error!(
+                        "[AudioInputBridge] Connection failed after {:?}",
+                        start.elapsed()
+                    );
                     return Err(BridgeError::ConnectionFailed(
                         "Failed to initialize Dora node - check Dora daemon is running".to_string(),
                     ));

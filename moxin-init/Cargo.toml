@@ -3,7 +3,7 @@ name = "moxin-init"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "First-run model download and environment initialization for Moxin Voice"
+description = "First-run model download and environment initialization for Moxin Translator"
 
 [dependencies]
 anyhow = { workspace = true }

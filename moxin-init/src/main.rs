@@ -1,7 +1,7 @@
 //! # moxin-init
 //!
-//! First-run model downloader for Moxin Voice.
-//! Replaces the conda/Python bootstrap: downloads Qwen3 TTS and ASR models
+//! First-run model downloader for Moxin Translator.
+//! Replaces the conda/Python bootstrap: downloads ASR and translator models
 //! directly via HTTP, with ModelScope as the default provider and Hugging Face
 //! available as a fallback.
 //!
@@ -12,11 +12,6 @@
 //! | Variable                          | Default                                              |
 //! |-----------------------------------|------------------------------------------------------|
 //! | `MOXIN_BOOTSTRAP_STATE_PATH`      | (no state file written)                              |
-//! | `QWEN3_TTS_MODEL_ROOT`            | `~/.OminiX/models/qwen3-tts-mlx`                    |
-//! | `QWEN3_TTS_CUSTOMVOICE_MODEL_DIR` | `$QWEN3_TTS_MODEL_ROOT/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit` |
-//! | `QWEN3_TTS_CUSTOMVOICE_REPO`      | `mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit`|
-//! | `QWEN3_TTS_BASE_MODEL_DIR`        | `$QWEN3_TTS_MODEL_ROOT/Qwen3-TTS-12Hz-1.7B-Base-8bit`       |
-//! | `QWEN3_TTS_BASE_REPO`             | `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit`       |
 //! | `QWEN3_ASR_MODEL_PATH`            | `~/.OminiX/models/qwen3-asr-1.7b`                    |
 //! | `QWEN3_ASR_REPO`                  | `mlx-community/Qwen3-ASR-1.7B-8bit`                 |
 //! | `QWEN35_TRANSLATOR_MODEL_PATH`    | `~/.OminiX/models/Qwen3.5-2B-MLX-4bit`              |
@@ -42,37 +37,18 @@ use serde::{Deserialize, Serialize};
 // where pct is overall download progress as a float 0.0000–1.0000.
 
 // Actual download sizes in bytes (measured 2026-04-17, `du -sk` × 1024)
-const BYTES_TTS_CUSTOM: u64 = 5_473_562_624; // Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit
-const BYTES_TTS_BASE: u64 = 3_104_284_672; // Qwen3-TTS-12Hz-1.7B-Base-8bit
 const BYTES_TRANSLATOR: u64 = 1_749_164_032; // Qwen3.5-2B-MLX-4bit
 const BYTES_ASR: u64 = 2_473_308_160; // Qwen3-ASR-1.7B-8bit
-const TOTAL_BYTES: u64 = BYTES_TTS_CUSTOM + BYTES_TTS_BASE + BYTES_TRANSLATOR + BYTES_ASR;
+const TOTAL_BYTES: u64 = BYTES_TRANSLATOR + BYTES_ASR;
 const MODEL_COMPLETION_MARKER: &str = ".moxin-model-complete.json";
 const BOOTSTRAP_VERSION: u32 = 1;
 const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
 const DEFAULT_MODELSCOPE_ENDPOINT: &str = "https://modelscope.cn";
-const HTTP_USER_AGENT: &str = "MoxinVoice/moxin-init";
-const PROVIDER_PROBE_REPO: &str = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit";
+const HTTP_USER_AGENT: &str = "MoxinTranslator/moxin-init";
+const PROVIDER_PROBE_REPO: &str = "mlx-community/Qwen3.5-2B-MLX-4bit";
 const PROVIDER_PROBE_FILE: &str = "config.json";
 const BOOTSTRAP_LOCK_FILE: &str = "bootstrap.lock";
 const MAX_DOWNLOAD_FILE_ATTEMPTS: usize = 4;
-
-const TTS_MODEL_FILES: &[&str] = &[
-    ".gitattributes",
-    "README.md",
-    "config.json",
-    "generation_config.json",
-    "merges.txt",
-    "model.safetensors",
-    "model.safetensors.index.json",
-    "preprocessor_config.json",
-    "speech_tokenizer/config.json",
-    "speech_tokenizer/configuration.json",
-    "speech_tokenizer/model.safetensors",
-    "speech_tokenizer/preprocessor_config.json",
-    "tokenizer_config.json",
-    "vocab.json",
-];
 
 const ASR_MODEL_FILES: &[&str] = &[
     ".gitattributes",
@@ -310,17 +286,6 @@ fn ensure_model_dir_ready(
 
 // ── Model readiness checks ────────────────────────────────────────────────────
 
-fn tts_model_ready(dir: &Path) -> bool {
-    file_exists(&dir.join("config.json"))
-        && file_exists(&dir.join("generation_config.json"))
-        && file_exists(&dir.join("vocab.json"))
-        && file_exists(&dir.join("merges.txt"))
-        && (file_exists(&dir.join("model.safetensors"))
-            || file_exists(&dir.join("model.safetensors.index.json")))
-        && file_exists(&dir.join("speech_tokenizer/config.json"))
-        && file_exists(&dir.join("speech_tokenizer/model.safetensors"))
-}
-
 fn asr_model_ready(dir: &Path) -> bool {
     file_exists(&dir.join("config.json"))
 }
@@ -528,8 +493,6 @@ fn normalize_endpoint(endpoint: &str) -> String {
 
 fn modelscope_manifest_files(repo_id: &str) -> Result<&'static [&'static str]> {
     match repo_id {
-        "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit"
-        | "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit" => Ok(TTS_MODEL_FILES),
         "mlx-community/Qwen3-ASR-1.7B-8bit" => Ok(ASR_MODEL_FILES),
         "mlx-community/Qwen3.5-2B-MLX-4bit" => Ok(QWEN35_TRANSLATOR_MODEL_FILES),
         _ => bail!("no built-in ModelScope manifest for {}", repo_id),
@@ -982,10 +945,9 @@ mod tests {
             ]
         );
 
-        let tts_files =
-            modelscope_manifest_files("mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")
-                .unwrap();
-        assert!(tts_files.contains(&"speech_tokenizer/model.safetensors"));
+        let translator_files =
+            modelscope_manifest_files("mlx-community/Qwen3.5-2B-MLX-4bit").unwrap();
+        assert!(translator_files.contains(&"tokenizer.json"));
     }
 
     #[test]
@@ -1029,8 +991,9 @@ mod tests {
             .unwrap();
 
         let headers = rx.recv().unwrap().join("");
+        let headers_lower = headers.to_ascii_lowercase();
         assert!(
-            headers.contains("User-Agent: MoxinVoice/moxin-init"),
+            headers_lower.contains("user-agent: moxintranslator/moxin-init"),
             "request headers did not contain the expected User-Agent:\n{headers}"
         );
     }
@@ -1091,8 +1054,9 @@ mod tests {
         assert_eq!(written, 10);
         assert_eq!(fs::read(&dest).unwrap(), b"abcdefghij");
         let second_headers = rx.recv().unwrap();
+        let second_headers_lower = second_headers.to_ascii_lowercase();
         assert!(
-            second_headers.contains("Range: bytes=3-"),
+            second_headers_lower.contains("range: bytes=3-"),
             "second request did not resume from byte 3:\n{second_headers}"
         );
 
@@ -1195,10 +1159,6 @@ mod tests {
 
 struct Config {
     state_file: Option<PathBuf>,
-    tts_custom_dir: PathBuf,
-    tts_custom_repo: String,
-    tts_base_dir: PathBuf,
-    tts_base_repo: String,
     asr_dir: PathBuf,
     asr_repo: String,
     qwen35_translator_dir: PathBuf,
@@ -1212,31 +1172,18 @@ fn bootstrap_lock_path(cfg: &Config) -> PathBuf {
         .unwrap_or_else(|| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join("Library/Logs/MoxinVoice")
+                .join("Library/Logs/MoxinTranslator")
                 .join(BOOTSTRAP_LOCK_FILE)
         })
 }
 
 fn resolve_config() -> Config {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let qwen_root = env::var("QWEN3_TTS_MODEL_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| home.join(".OminiX/models/qwen3-tts-mlx"));
 
     Config {
         state_file: env::var("MOXIN_BOOTSTRAP_STATE_PATH")
             .ok()
             .map(PathBuf::from),
-        tts_custom_dir: env::var("QWEN3_TTS_CUSTOMVOICE_MODEL_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| qwen_root.join("Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")),
-        tts_custom_repo: env::var("QWEN3_TTS_CUSTOMVOICE_REPO")
-            .unwrap_or_else(|_| "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit".to_string()),
-        tts_base_dir: env::var("QWEN3_TTS_BASE_MODEL_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| qwen_root.join("Qwen3-TTS-12Hz-1.7B-Base-8bit")),
-        tts_base_repo: env::var("QWEN3_TTS_BASE_REPO")
-            .unwrap_or_else(|_| "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit".to_string()),
         asr_dir: env::var("QWEN3_ASR_MODEL_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| home.join(".OminiX/models/qwen3-asr-1.7b")),
@@ -1265,12 +1212,8 @@ fn main() -> Result<()> {
         .join(" -> ");
     eprintln!("[moxin-init] model provider order: {}", provider_names);
 
-    // 4 potential downloads: CustomVoice TTS, Base TTS, Qwen3.5 translator, ASR
-    let total: usize = 4;
-    let custom_ready =
-        ensure_model_dir_ready(&cfg.tts_custom_dir, &cfg.tts_custom_repo, tts_model_ready)?;
-    let base_ready =
-        ensure_model_dir_ready(&cfg.tts_base_dir, &cfg.tts_base_repo, tts_model_ready)?;
+    // 2 potential downloads: Qwen3.5 translator and ASR.
+    let total: usize = 2;
     let translator_ready = ensure_model_dir_ready(
         &cfg.qwen35_translator_dir,
         &cfg.qwen35_translator_repo,
@@ -1279,12 +1222,6 @@ fn main() -> Result<()> {
     let asr_ready = ensure_model_dir_ready(&cfg.asr_dir, &cfg.asr_repo, asr_model_ready)?;
 
     let mut bytes_done: u64 = 0;
-    if custom_ready {
-        bytes_done += BYTES_TTS_CUSTOM;
-    }
-    if base_ready {
-        bytes_done += BYTES_TTS_BASE;
-    }
     if translator_ready {
         bytes_done += BYTES_TRANSLATOR;
     }
@@ -1304,90 +1241,12 @@ fn main() -> Result<()> {
 
     let client = build_http_client(Duration::from_secs(3600))?;
 
-    // ── Step 1: TTS CustomVoice ───────────────────────────────────────────────
-    if custom_ready {
-        eprintln!("[moxin-init] TTS CustomVoice already ready, skipping");
-        write_state(
-            state_file,
-            1,
-            total,
-            "TTS CustomVoice",
-            "Already present",
-            bytes_done,
-            TOTAL_BYTES,
-        );
-    } else {
-        write_state(
-            state_file,
-            1,
-            total,
-            "Downloading TTS CustomVoice",
-            "Starting...",
-            bytes_done,
-            TOTAL_BYTES,
-        );
-        download_model_with_provider_fallback(
-            &client,
-            &providers,
-            &cfg.tts_custom_repo,
-            &cfg.tts_custom_dir,
-            state_file,
-            1,
-            total,
-            &mut bytes_done,
-            TOTAL_BYTES,
-            tts_model_ready,
-            "TTS CustomVoice model incomplete after download",
-        )?;
-        write_model_completion_marker(&cfg.tts_custom_dir, &cfg.tts_custom_repo)?;
-        eprintln!("[moxin-init] TTS CustomVoice download complete");
-    }
-
-    // ── Step 2: TTS Base ──────────────────────────────────────────────────────
-    if base_ready {
-        eprintln!("[moxin-init] TTS Base already ready, skipping");
-        write_state(
-            state_file,
-            2,
-            total,
-            "TTS Base",
-            "Already present",
-            bytes_done,
-            TOTAL_BYTES,
-        );
-    } else {
-        write_state(
-            state_file,
-            2,
-            total,
-            "Downloading TTS Base",
-            "Starting...",
-            bytes_done,
-            TOTAL_BYTES,
-        );
-        download_model_with_provider_fallback(
-            &client,
-            &providers,
-            &cfg.tts_base_repo,
-            &cfg.tts_base_dir,
-            state_file,
-            2,
-            total,
-            &mut bytes_done,
-            TOTAL_BYTES,
-            tts_model_ready,
-            "TTS Base model incomplete after download",
-        )?;
-        write_model_completion_marker(&cfg.tts_base_dir, &cfg.tts_base_repo)?;
-        eprintln!("[moxin-init] TTS Base download complete");
-    }
-
-    // ── Step 3: Qwen3.5 translator (required) ─────────────────────────────────
+    // ── Step 1: Qwen3.5 translator (required) ─────────────────────────────────
     if translator_ready {
         eprintln!("[moxin-init] Qwen3.5 translator model already ready, skipping");
         write_state(
             state_file,
-            3,
+            1,
             total,
             "Qwen3.5 Translator",
             "Already present",
@@ -1397,7 +1256,7 @@ fn main() -> Result<()> {
     } else {
         write_state(
             state_file,
-            3,
+            1,
             total,
             "Downloading Qwen3.5 Translator",
             "Starting...",
@@ -1410,7 +1269,7 @@ fn main() -> Result<()> {
             &cfg.qwen35_translator_repo,
             &cfg.qwen35_translator_dir,
             state_file,
-            3,
+            1,
             total,
             &mut bytes_done,
             TOTAL_BYTES,
@@ -1422,12 +1281,12 @@ fn main() -> Result<()> {
         eprintln!("[moxin-init] Qwen3.5 translator download complete");
     }
 
-    // ── Step 4: ASR (required) ─────────────────────────────────────────────────
+    // ── Step 2: ASR (required) ─────────────────────────────────────────────────
     if asr_ready {
         eprintln!("[moxin-init] ASR model already ready, skipping");
         write_state(
             state_file,
-            4,
+            2,
             total,
             "ASR Model",
             "Already present",
@@ -1437,7 +1296,7 @@ fn main() -> Result<()> {
     } else {
         write_state(
             state_file,
-            4,
+            2,
             total,
             "Downloading ASR Model",
             "Starting...",
@@ -1450,7 +1309,7 @@ fn main() -> Result<()> {
             &cfg.asr_repo,
             &cfg.asr_dir,
             state_file,
-            4,
+            2,
             total,
             &mut bytes_done,
             TOTAL_BYTES,

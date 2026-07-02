@@ -12,21 +12,13 @@
 use anyhow::{anyhow, Result};
 use arrow::array::{Array, Float32Array};
 use dora_node_api::{DoraNode, Event, IntoArrow};
-use qwen3_asr_mlx::{default_model_path, Qwen3ASR, SamplingConfig};
-
-/// Hard cap on generated tokens per transcription.
-///
-/// Upstream default is 8192. A 5–8 s audio segment realistically produces
-/// well under 200 text tokens, so this ceiling exists purely to bound
-/// worst-case memory when the decoder enters a degenerate repetition loop
-/// (the upstream repetition guard only catches single-token loops; multi-token
-/// cycles like `等，等，等，...` run to the cap). With each generated token
-/// pinning ~230 KB of KV-cache, 1024 caps a runaway call at ~240 MB instead
-/// of ~1.9 GB; combined with the post-call `mlx_clear_cache()` below, even
-/// repeated runaway calls cannot accumulate.
-const ASR_MAX_TOKENS: usize = 1024;
+use qwen3_asr_mlx::{audio, default_model_path, Qwen3ASR, SamplingConfig};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+
+const ASR_MAX_TOKENS: usize = 1024;
+const ASR_MIN_SAMPLES_16K: usize = 1600;
+const ASR_MAX_ABS_SAMPLE: f32 = 1.0;
 
 fn resolve_model_path() -> PathBuf {
     // 1. Explicit env override (ignore empty string)
@@ -179,10 +171,32 @@ fn preview_text_for_log(text: &str, max_chars: usize) -> &str {
     }
 }
 
+fn sanitize_audio_samples(samples: &[f32]) -> (Vec<f32>, usize, usize) {
+    let mut non_finite = 0;
+    let mut clipped = 0;
+    let sanitized = samples
+        .iter()
+        .map(|sample| {
+            if !sample.is_finite() {
+                non_finite += 1;
+                0.0
+            } else {
+                let clamped = sample.clamp(-ASR_MAX_ABS_SAMPLE, ASR_MAX_ABS_SAMPLE);
+                if clamped != *sample {
+                    clipped += 1;
+                }
+                clamped
+            }
+        })
+        .collect();
+
+    (sanitized, non_finite, clipped)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        build_transcription_meta, preview_text_for_log,
+        build_transcription_meta, preview_text_for_log, sanitize_audio_samples,
         should_emit_question_ended_marker_before_question,
     };
     use dora_node_api::Parameter;
@@ -206,8 +220,14 @@ mod tests {
             true,
             true,
         );
-        assert!(matches!(meta.get("question_id"), Some(Parameter::Integer(123))));
-        assert!(matches!(meta.get("burst_id"), Some(Parameter::Integer(456))));
+        assert!(matches!(
+            meta.get("question_id"),
+            Some(Parameter::Integer(123))
+        ));
+        assert!(matches!(
+            meta.get("burst_id"),
+            Some(Parameter::Integer(456))
+        ));
         assert!(matches!(
             meta.get("transcription_mode"),
             Some(Parameter::String(mode)) if mode == "final"
@@ -216,7 +236,10 @@ mod tests {
             meta.get("segment_reason"),
             Some(Parameter::String(reason)) if reason == "speech_end"
         ));
-        assert!(matches!(meta.get("question_ended"), Some(Parameter::Bool(true))));
+        assert!(matches!(
+            meta.get("question_ended"),
+            Some(Parameter::Bool(true))
+        ));
         assert!(matches!(
             meta.get("question_ended_only"),
             Some(Parameter::Bool(true))
@@ -245,6 +268,16 @@ mod tests {
             Some(456)
         ));
     }
+
+    #[test]
+    fn sanitize_audio_samples_replaces_non_finite_and_clamps() {
+        let (samples, non_finite, clipped) =
+            sanitize_audio_samples(&[0.25, f32::NAN, f32::INFINITY, -2.0, 2.0]);
+
+        assert_eq!(samples, vec![0.25, 0.0, 0.0, -1.0, 1.0]);
+        assert_eq!(non_finite, 2);
+        assert_eq!(clipped, 2);
+    }
 }
 
 fn main() -> Result<()> {
@@ -257,8 +290,8 @@ fn main() -> Result<()> {
 
     tracing::info!("dora-qwen3-asr starting");
 
-    let (mut node, mut events) = DoraNode::init_from_env()
-        .map_err(|e| anyhow!("Failed to init Dora node: {}", e))?;
+    let (mut node, mut events) =
+        DoraNode::init_from_env().map_err(|e| anyhow!("Failed to init Dora node: {}", e))?;
 
     tracing::info!("Connected to Dora dataflow");
 
@@ -269,7 +302,6 @@ fn main() -> Result<()> {
 
     tracing::info!("Default language: {}", default_language);
 
-    // Load model
     let model_path = resolve_model_path();
     tracing::info!("Loading Qwen3-ASR model from: {}", model_path.display());
 
@@ -300,13 +332,14 @@ fn main() -> Result<()> {
         match event {
             Event::Input { id, data, metadata } => {
                 if id.as_str() == "question_ended" {
-                    let question_id = metadata
-                        .parameters
-                        .get("question_id")
-                        .and_then(|p| match p {
-                            dora_node_api::Parameter::Integer(v) => Some(*v),
-                            _ => None,
-                        });
+                    let question_id =
+                        metadata
+                            .parameters
+                            .get("question_id")
+                            .and_then(|p| match p {
+                                dora_node_api::Parameter::Integer(v) => Some(*v),
+                                _ => None,
+                            });
                     tracing::info!(
                         "Received question_ended marker from upstream (question_id={:?})",
                         question_id
@@ -338,9 +371,11 @@ fn main() -> Result<()> {
                     }
                 };
 
-                let samples: Vec<f32> = (0..samples_arr.len())
+                let raw_samples: Vec<f32> = (0..samples_arr.len())
                     .map(|i| samples_arr.value(i))
                     .collect();
+                let (samples, non_finite_count, clipped_count) =
+                    sanitize_audio_samples(&raw_samples);
 
                 // Read sample_rate from metadata (default 16000)
                 let sample_rate: u32 = metadata
@@ -361,17 +396,16 @@ fn main() -> Result<()> {
                         _ => None,
                     })
                     .unwrap_or_else(|| default_language.clone());
-                let question_id: Option<i64> = metadata
-                    .parameters
-                    .get("question_id")
-                    .and_then(|p| match p {
-                        dora_node_api::Parameter::Integer(v) => Some(*v),
-                        _ => None,
-                    });
-                let burst_id: Option<i64> = metadata
-                    .parameters
-                    .get("burst_id")
-                    .and_then(|p| match p {
+                let question_id: Option<i64> =
+                    metadata
+                        .parameters
+                        .get("question_id")
+                        .and_then(|p| match p {
+                            dora_node_api::Parameter::Integer(v) => Some(*v),
+                            _ => None,
+                        });
+                let burst_id: Option<i64> =
+                    metadata.parameters.get("burst_id").and_then(|p| match p {
                         dora_node_api::Parameter::Integer(v) => Some(*v),
                         _ => None,
                     });
@@ -424,6 +458,14 @@ fn main() -> Result<()> {
                     duration_secs,
                     language
                 );
+                if non_finite_count > 0 || clipped_count > 0 {
+                    let msg = format!(
+                        "Sanitized audio before ASR: replaced {} non-finite samples, clipped {} samples",
+                        non_finite_count, clipped_count
+                    );
+                    tracing::warn!("{}", msg);
+                    let _ = send_log(&mut node, &msg);
+                }
 
                 let _ = send_log(
                     &mut node,
@@ -436,7 +478,7 @@ fn main() -> Result<()> {
                 // Resample to 16kHz if needed
                 let samples_16k = if sample_rate != 16000 {
                     tracing::info!("Resampling {}Hz -> 16000Hz", sample_rate);
-                    match qwen3_asr_mlx::audio::resample(&samples, sample_rate, 16000) {
+                    match audio::resample(&samples, sample_rate, 16000) {
                         Ok(resampled) => resampled,
                         Err(e) => {
                             let msg = format!("Resample failed: {}", e);
@@ -461,21 +503,36 @@ fn main() -> Result<()> {
                     samples
                 };
 
-                // Transcribe with a tighter token cap than the upstream default
-                // and an explicit Metal cache release after each call. Upstream's
-                // `transcribe_samples` builds its own SamplingConfig (max_tokens=8192)
-                // and never returns Metal buffers to the system between calls.
+                if samples_16k.len() < ASR_MIN_SAMPLES_16K {
+                    let msg = format!(
+                        "Skipping ASR segment: {} samples is shorter than {} samples at 16kHz",
+                        samples_16k.len(),
+                        ASR_MIN_SAMPLES_16K
+                    );
+                    tracing::warn!("{}", msg);
+                    let _ = send_log(&mut node, &msg);
+                    let _ = send_transcription(
+                        &mut node,
+                        "",
+                        question_id,
+                        burst_id,
+                        transcription_mode.as_deref(),
+                        segment_reason.as_deref(),
+                        false,
+                        false,
+                    );
+                    last_emitted_question_id = question_id;
+                    last_emitted_burst_id = burst_id;
+                    continue;
+                }
+
+                let start = std::time::Instant::now();
                 let config = SamplingConfig {
                     temperature: 0.0,
                     max_tokens: ASR_MAX_TOKENS,
                 };
-                let start = std::time::Instant::now();
                 let transcribe_result =
                     model.transcribe_samples_with_config(&samples_16k, &language, &config);
-                // Release Metal buffer pool accumulated by the KV cache during
-                // generation. Equivalent to Python's `mx.metal.clear_cache()`;
-                // mirrors the translator node's hygiene. MUST run on both success
-                // and error paths or memory will leak when transcription fails.
                 unsafe {
                     mlx_sys::mlx_clear_cache();
                 }

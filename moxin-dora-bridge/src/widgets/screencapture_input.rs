@@ -8,11 +8,11 @@
 //! This matches the format the ASR pipeline already expects, so no resampling
 //! is needed.
 
-use screencapturekit::prelude::*;
 use screencapturekit::cm::CMSampleBuffer;
+use screencapturekit::prelude::*;
 use screencapturekit::stream::output_type::SCStreamOutputType;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicI8, Ordering};
+use std::sync::{Arc, Mutex};
 use tracing::{error, info, warn};
 
 /// -1 = not yet probed, 0 = denied/unavailable, 1 = granted

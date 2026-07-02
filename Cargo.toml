@@ -1,14 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "moxin-voice-shell",
+    "moxin-translator-shell",
     "moxin-widgets",
     "moxin-dora-bridge",
     "moxin-ui",
     "moxin-init",
-    "apps/moxin-voice",
-    # "node-hub/dora-primespeech-mlx",  # PrimeSpeech MLX — removed (Qwen3-only). See doc/REFACTOR_QWEN3_ONLY.md.
-    "node-hub/dora-qwen3-tts-mlx",
+    "apps/moxin-translator",
     "node-hub/dora-qwen3-asr",
     "node-hub/dora-qwen35-translator",
 ]
@@ -50,12 +48,5 @@ rand = "0.8"
 dora-node-api = "0.4.0"
 # dora-node-api = { git = "https://github.com/dora-rs/dora.git", tag = "v0.3.12" }
 
-# All OminiX-MLX crates are pinned directly in their consuming Cargo.toml files
-# via `{ git = "...", rev = "6aac996db..." }`. The only patch we still need is
-# the vendored fork of gpt-sovits-mlx (used by the currently-disabled
-# dora-primespeech-mlx member). Pinning mlx-rs et al. through hard-coded
-# `~/.cargo/git/checkouts/.../<rev>/...` paths here was fragile — any cargo
-# cache churn (parallel builds, gc, disk cleanup) deleted the rev dir and
-# broke the workspace — so those entries have been removed.
-[patch."https://github.com/OminiX-ai/OminiX-MLX.git"]
-gpt-sovits-mlx = { path = "node-hub/dora-primespeech-mlx/patches/gpt-sovits-mlx" }
+# OminiX-MLX crates are pinned directly in their consuming Cargo.toml files
+# via `{ git = "...", rev = "6aac996db..." }`.

@@ -537,7 +537,11 @@ impl Widget for MoxinHero {
 
         match event.hits(cx, start_view.area()) {
             Hit::FingerUp(_) => {
-                cx.widget_action(self.widget_uid(), &scope.path, MoxinHeroAction::StartClicked);
+                cx.widget_action(
+                    self.widget_uid(),
+                    &scope.path,
+                    MoxinHeroAction::StartClicked,
+                );
             }
             _ => {}
         }
@@ -973,4 +977,3 @@ impl MoxinHeroRef {
         }
     }
 }
-

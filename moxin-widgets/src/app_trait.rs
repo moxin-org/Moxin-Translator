@@ -1,6 +1,6 @@
 //! # MoxinApp Trait - Plugin App Interface
 //!
-//! This module defines the standard interface for apps that integrate with the Moxin Studio shell.
+//! This module defines the standard interface for apps hosted by the Moxin Translator shell.
 //!
 //! ## Architecture
 //!
@@ -59,7 +59,7 @@
 //! }
 //! ```
 
-use makepad_widgets::{Cx, LiveId, Action, live_id, ButtonAction, WidgetActionCast};
+use makepad_widgets::{live_id, Action, ButtonAction, Cx, LiveId, WidgetActionCast};
 
 /// Metadata about a registered app
 #[derive(Clone, Debug)]
@@ -171,7 +171,10 @@ impl PageRouter {
 
     /// Get all pages that should be hidden (all except current)
     pub fn pages_to_hide(&self) -> impl Iterator<Item = PageId> + '_ {
-        self.pages.iter().copied().filter(move |p| Some(*p) != self.current_page)
+        self.pages
+            .iter()
+            .copied()
+            .filter(move |p| Some(*p) != self.current_page)
     }
 
     /// Check if any registered tab was clicked in actions (uses path-based detection)
@@ -197,7 +200,10 @@ impl PageRouter {
 /// Helper to check if a specific tab was clicked using path-based detection
 /// This avoids WidgetUid mismatch issues with nested widgets
 pub fn tab_clicked(actions: &[Action], tab_id: LiveId) -> bool {
-    actions.iter().filter_map(|a| a.as_widget_action()).any(|wa| {
+    actions
+        .iter()
+        .filter_map(|a| a.as_widget_action())
+        .any(|wa| {
             if let ButtonAction::Clicked(_) = wa.cast() {
                 wa.path.data.iter().any(|id| *id == tab_id)
             } else {
@@ -206,7 +212,7 @@ pub fn tab_clicked(actions: &[Action], tab_id: LiveId) -> bool {
         })
 }
 
-/// Trait for apps that integrate with Moxin Studio shell
+/// Trait for apps hosted by the Moxin Translator shell.
 ///
 /// # Example
 /// ```ignore

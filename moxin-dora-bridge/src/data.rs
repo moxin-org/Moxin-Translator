@@ -1,6 +1,6 @@
 //! # Data Types for Moxin-Dora Communication
 //!
-//! This module defines the core data types exchanged between the Moxin Studio UI
+//! This module defines the core data types exchanged between the Moxin Translator UI
 //! and the Dora dataflow runtime.
 //!
 //! ## Overview

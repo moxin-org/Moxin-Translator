@@ -25,7 +25,7 @@ pub use asr_listener::AsrListenerBridge;
 pub use audio_input::AudioInputBridge;
 pub use audio_player::AudioPlayerBridge;
 pub use prompt_input::PromptInputBridge;
+#[cfg(target_os = "macos")]
+pub use screencapture_input::{permission_granted, probe_permission_async};
 pub use system_log::SystemLogBridge;
 pub use translation_listener::TranslationListenerBridge;
-#[cfg(target_os = "macos")]
-pub use screencapture_input::{probe_permission_async, permission_granted};

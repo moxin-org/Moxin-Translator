@@ -1,6 +1,6 @@
 # dora-common
 
-Common utilities for Dora nodes in Moxin Studio.
+Common utilities for Dora nodes in Moxin Translator.
 
 ## Overview
 

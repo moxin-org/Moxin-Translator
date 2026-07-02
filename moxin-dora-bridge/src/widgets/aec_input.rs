@@ -119,13 +119,13 @@ impl Default for VadState {
             speech_buffer: Vec::new(),
             audio_segment_buffer: Vec::new(),
             silence_count: 0,
-            speech_start_threshold,         // From env or default 3
-            speech_end_threshold,           // From env or default 10 frames (~100ms)
-            min_segment_size,              // Configurable (default 300ms) at 16kHz
-            max_segment_size,               // Configurable (default 8s) at 16kHz
-            start_rms_threshold,            // Start gate (higher)
-            end_rms_threshold,              // End gate (lower, hysteresis)
-            question_end_silence_ms,        // From env or default 1000ms
+            speech_start_threshold,  // From env or default 3
+            speech_end_threshold,    // From env or default 10 frames (~100ms)
+            min_segment_size,        // Configurable (default 300ms) at 16kHz
+            max_segment_size,        // Configurable (default 8s) at 16kHz
+            start_rms_threshold,     // Start gate (higher)
+            end_rms_threshold,       // End gate (lower, hysteresis)
+            question_end_silence_ms, // From env or default 1000ms
             last_speech_end_time: None,
             question_end_sent: false,
             current_question_id: rand::random::<u32>() % 900000 + 100000,
@@ -158,8 +158,8 @@ impl NativeAudioCapture {
         }
 
         unsafe {
-            let library = Library::new(library_path)
-                .map_err(|e| format!("Failed to load library: {}", e))?;
+            let library =
+                Library::new(library_path).map_err(|e| format!("Failed to load library: {}", e))?;
 
             // We need to transmute to 'static lifetime because libloading symbols
             // are tied to the library lifetime, but we keep the library alive
@@ -407,7 +407,9 @@ impl CpalMicCapture {
                 .ok_or("No input device available")?
         };
 
-        let device_name = device.name().unwrap_or_else(|_| "<unknown input device>".to_string());
+        let device_name = device
+            .name()
+            .unwrap_or_else(|_| "<unknown input device>".to_string());
         let supported_config = device
             .default_input_config()
             .map_err(|e| format!("Failed to query default input config: {}", e))?;
@@ -470,11 +472,7 @@ impl CpalMicCapture {
         self.is_recording = true;
         info!(
             "CPAL mic capture started (no AEC) device='{}' input={}Hz/{}ch/{:?} target={}Hz/mono",
-            device_name,
-            input_rate,
-            channels,
-            sample_format,
-            self.sample_rate
+            device_name, input_rate, channels, sample_format, self.sample_rate
         );
         Ok(())
     }
@@ -653,14 +651,19 @@ impl AecInputBridge {
 
         // 3. ScreenCaptureKit system audio capture (macOS 13+, no user install needed)
         #[cfg(target_os = "macos")]
-        let mut sck_capture: Option<crate::widgets::screencapture_input::ScreenCaptureInput> = {
+        let mut sck_capture: Option<
+            crate::widgets::screencapture_input::ScreenCaptureInput,
+        > = {
             match crate::widgets::screencapture_input::ScreenCaptureInput::new() {
                 Ok(cap) => {
                     info!("[AecInput] ScreenCaptureKit available for system audio capture");
                     Some(cap)
                 }
                 Err(e) => {
-                    warn!("[AecInput] ScreenCaptureKit not available: {} (system audio disabled)", e);
+                    warn!(
+                        "[AecInput] ScreenCaptureKit not available: {} (system audio disabled)",
+                        e
+                    );
                     None
                 }
             }
@@ -750,17 +753,29 @@ impl AecInputBridge {
                     if let Some(ref mut sck) = sck_capture {
                         if let Err(e) = sck.start() {
                             error!("[AecInput] Failed to start system audio capture: {}", e);
-                            let _ = Self::send_log(&mut node, &node_id, "ERROR",
-                                &format!("System audio start failed: {} — falling back to mic", e));
+                            let _ = Self::send_log(
+                                &mut node,
+                                &node_id,
+                                "ERROR",
+                                &format!("System audio start failed: {} — falling back to mic", e),
+                            );
                             // Fall back to CPAL mic
                             let _ = cpal_capture.start();
                         } else {
-                            let _ = Self::send_log(&mut node, &node_id, "INFO",
-                                "🔊 Recording started (system audio via ScreenCaptureKit)");
+                            let _ = Self::send_log(
+                                &mut node,
+                                &node_id,
+                                "INFO",
+                                "🔊 Recording started (system audio via ScreenCaptureKit)",
+                            );
                         }
                     } else {
-                        let _ = Self::send_log(&mut node, &node_id, "WARN",
-                            "System audio unavailable — falling back to microphone");
+                        let _ = Self::send_log(
+                            &mut node,
+                            &node_id,
+                            "WARN",
+                            "System audio unavailable — falling back to microphone",
+                        );
                         let _ = cpal_capture.start();
                     }
                 }
@@ -771,13 +786,25 @@ impl AecInputBridge {
             }
             AudioSource::Microphone => {
                 if using_aec {
-                    if let Some(ref mut aec) = aec_capture { aec.start(); }
-                    let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Recording started with AEC (echo cancellation ON)");
+                    if let Some(ref mut aec) = aec_capture {
+                        aec.start();
+                    }
+                    let _ = Self::send_log(
+                        &mut node,
+                        &node_id,
+                        "INFO",
+                        "🎙️ Recording started with AEC (echo cancellation ON)",
+                    );
                 } else {
                     if let Err(e) = cpal_capture.start() {
                         error!("Failed to start CPAL capture: {}", e);
                     }
-                    let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Recording started without AEC (regular mic)");
+                    let _ = Self::send_log(
+                        &mut node,
+                        &node_id,
+                        "INFO",
+                        "🎙️ Recording started without AEC (regular mic)",
+                    );
                 }
             }
         }
@@ -799,7 +826,12 @@ impl AecInputBridge {
 
         // Send initial status
         let _ = Self::send_status(&mut node, "recording");
-        let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Mic recording STARTED (auto-start on connect)");
+        let _ = Self::send_log(
+            &mut node,
+            &node_id,
+            "INFO",
+            "🎙️ Mic recording STARTED (auto-start on connect)",
+        );
 
         // Main event loop
         let poll_interval = Duration::from_millis(10);
@@ -820,18 +852,25 @@ impl AecInputBridge {
             if let Some(ref ss) = shared_state {
                 let desired = ss.translation_audio_source.read().clone();
                 if desired != last_applied_source && recording_active {
-                    info!("[AecInput] Audio source changed via SharedDoraState: {:?} → {:?}",
-                        last_applied_source, desired);
+                    info!(
+                        "[AecInput] Audio source changed via SharedDoraState: {:?} → {:?}",
+                        last_applied_source, desired
+                    );
                     // Synthesize a SetAudioSource command by re-using the same handler.
                     // Stop current source.
                     match last_applied_source {
-                        AudioSource::SystemAudio => {
+                        AudioSource::SystemAudio =>
+                        {
                             #[cfg(target_os = "macos")]
-                            if let Some(ref mut sck) = sck_capture { sck.stop(); }
+                            if let Some(ref mut sck) = sck_capture {
+                                sck.stop();
+                            }
                         }
                         AudioSource::Microphone => {
                             if using_aec {
-                                if let Some(ref mut aec) = aec_capture { aec.stop(); }
+                                if let Some(ref mut aec) = aec_capture {
+                                    aec.stop();
+                                }
                             } else {
                                 cpal_capture.stop();
                             }
@@ -847,22 +886,42 @@ impl AecInputBridge {
                                 if let Some(ref mut sck) = sck_capture {
                                     if let Err(e) = sck.start() {
                                         error!("[AecInput] Failed to start system audio: {}", e);
-                                        let _ = Self::send_log(&mut node, &node_id, "ERROR",
-                                            &format!("System audio start failed: {}", e));
+                                        let _ = Self::send_log(
+                                            &mut node,
+                                            &node_id,
+                                            "ERROR",
+                                            &format!("System audio start failed: {}", e),
+                                        );
                                     } else {
-                                        let _ = Self::send_log(&mut node, &node_id, "INFO",
-                                            "🔊 Switched to system audio capture");
+                                        let _ = Self::send_log(
+                                            &mut node,
+                                            &node_id,
+                                            "INFO",
+                                            "🔊 Switched to system audio capture",
+                                        );
                                     }
                                 }
                             }
                         }
                         AudioSource::Microphone => {
                             if using_aec {
-                                if let Some(ref mut aec) = aec_capture { aec.start(); }
-                                let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Switched to microphone (AEC)");
+                                if let Some(ref mut aec) = aec_capture {
+                                    aec.start();
+                                }
+                                let _ = Self::send_log(
+                                    &mut node,
+                                    &node_id,
+                                    "INFO",
+                                    "🎙️ Switched to microphone (AEC)",
+                                );
                             } else {
                                 let _ = cpal_capture.start();
-                                let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Switched to microphone");
+                                let _ = Self::send_log(
+                                    &mut node,
+                                    &node_id,
+                                    "INFO",
+                                    "🎙️ Switched to microphone",
+                                );
                             }
                         }
                     }
@@ -882,9 +941,17 @@ impl AecInputBridge {
                                     {
                                         if let Some(ref mut sck) = sck_capture {
                                             if let Err(e) = sck.start() {
-                                                error!("[AecInput] Failed to start system audio: {}", e);
+                                                error!(
+                                                    "[AecInput] Failed to start system audio: {}",
+                                                    e
+                                                );
                                             } else {
-                                                let _ = Self::send_log(&mut node, &node_id, "INFO", "🔊 Recording STARTED (system audio)");
+                                                let _ = Self::send_log(
+                                                    &mut node,
+                                                    &node_id,
+                                                    "INFO",
+                                                    "🔊 Recording STARTED (system audio)",
+                                                );
                                             }
                                         }
                                     }
@@ -894,12 +961,22 @@ impl AecInputBridge {
                                         if let Some(ref mut aec) = aec_capture {
                                             aec.start();
                                         }
-                                        let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Recording STARTED with AEC");
+                                        let _ = Self::send_log(
+                                            &mut node,
+                                            &node_id,
+                                            "INFO",
+                                            "🎙️ Recording STARTED with AEC",
+                                        );
                                     } else {
                                         if let Err(e) = cpal_capture.start() {
                                             error!("Failed to start CPAL: {}", e);
                                         }
-                                        let _ = Self::send_log(&mut node, &node_id, "INFO", "🎙️ Recording STARTED without AEC");
+                                        let _ = Self::send_log(
+                                            &mut node,
+                                            &node_id,
+                                            "INFO",
+                                            "🎙️ Recording STARTED without AEC",
+                                        );
                                     }
                                 }
                             }
@@ -928,7 +1005,12 @@ impl AecInputBridge {
                                 ss.mic.set_recording(false);
                             }
                             let _ = Self::send_status(&mut node, "stopped");
-                            let _ = Self::send_log(&mut node, &node_id, "INFO", "🔇 Mic recording STOPPED");
+                            let _ = Self::send_log(
+                                &mut node,
+                                &node_id,
+                                "INFO",
+                                "🔇 Mic recording STOPPED",
+                            );
                         }
                     }
                     AecControlCommand::SetAecEnabled(enabled) => {
@@ -956,12 +1038,22 @@ impl AecInputBridge {
                                     if let Some(ref mut aec) = aec_capture {
                                         aec.start();
                                     }
-                                    let _ = Self::send_log(&mut node, &node_id, "INFO", "🔄 Switched to AEC capture (echo cancellation ON)");
+                                    let _ = Self::send_log(
+                                        &mut node,
+                                        &node_id,
+                                        "INFO",
+                                        "🔄 Switched to AEC capture (echo cancellation ON)",
+                                    );
                                 } else {
                                     if let Err(e) = cpal_capture.start() {
                                         error!("Failed to start CPAL: {}", e);
                                     }
-                                    let _ = Self::send_log(&mut node, &node_id, "INFO", "🔄 Switched to regular mic (echo cancellation OFF)");
+                                    let _ = Self::send_log(
+                                        &mut node,
+                                        &node_id,
+                                        "INFO",
+                                        "🔄 Switched to regular mic (echo cancellation OFF)",
+                                    );
                                 }
                             }
                         }
@@ -979,7 +1071,8 @@ impl AecInputBridge {
                         // Stop the currently active capture before switching.
                         if recording_active {
                             match audio_source {
-                                AudioSource::SystemAudio => {
+                                AudioSource::SystemAudio =>
+                                {
                                     #[cfg(target_os = "macos")]
                                     if let Some(ref mut sck) = sck_capture {
                                         sck.stop();
@@ -987,7 +1080,9 @@ impl AecInputBridge {
                                 }
                                 AudioSource::Microphone => {
                                     if using_aec {
-                                        if let Some(ref mut aec) = aec_capture { aec.stop(); }
+                                        if let Some(ref mut aec) = aec_capture {
+                                            aec.stop();
+                                        }
                                     } else {
                                         cpal_capture.stop();
                                     }
@@ -1006,12 +1101,23 @@ impl AecInputBridge {
                                     {
                                         if let Some(ref mut sck) = sck_capture {
                                             if let Err(e) = sck.start() {
-                                                error!("[AecInput] Failed to start system audio: {}", e);
-                                                let _ = Self::send_log(&mut node, &node_id, "ERROR",
-                                                    &format!("System audio start failed: {}", e));
+                                                error!(
+                                                    "[AecInput] Failed to start system audio: {}",
+                                                    e
+                                                );
+                                                let _ = Self::send_log(
+                                                    &mut node,
+                                                    &node_id,
+                                                    "ERROR",
+                                                    &format!("System audio start failed: {}", e),
+                                                );
                                             } else {
-                                                let _ = Self::send_log(&mut node, &node_id, "INFO",
-                                                    "🔊 Switched to system audio capture");
+                                                let _ = Self::send_log(
+                                                    &mut node,
+                                                    &node_id,
+                                                    "INFO",
+                                                    "🔊 Switched to system audio capture",
+                                                );
                                             }
                                         } else {
                                             error!("[AecInput] ScreenCaptureKit not available");
@@ -1022,15 +1128,25 @@ impl AecInputBridge {
                                 }
                                 AudioSource::Microphone => {
                                     if using_aec {
-                                        if let Some(ref mut aec) = aec_capture { aec.start(); }
-                                        let _ = Self::send_log(&mut node, &node_id, "INFO",
-                                            "🎙️ Switched to microphone (AEC ON)");
+                                        if let Some(ref mut aec) = aec_capture {
+                                            aec.start();
+                                        }
+                                        let _ = Self::send_log(
+                                            &mut node,
+                                            &node_id,
+                                            "INFO",
+                                            "🎙️ Switched to microphone (AEC ON)",
+                                        );
                                     } else {
                                         if let Err(e) = cpal_capture.start() {
                                             error!("Failed to start CPAL: {}", e);
                                         }
-                                        let _ = Self::send_log(&mut node, &node_id, "INFO",
-                                            "🎙️ Switched to microphone");
+                                        let _ = Self::send_log(
+                                            &mut node,
+                                            &node_id,
+                                            "INFO",
+                                            "🎙️ Switched to microphone",
+                                        );
                                     }
                                 }
                             }
@@ -1050,7 +1166,8 @@ impl AecInputBridge {
                 let mut vad_results: Vec<bool> = Vec::new();
 
                 // Debug: track audio stats periodically
-                static AUDIO_DEBUG_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                static AUDIO_DEBUG_COUNTER: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(0);
                 let debug_count = AUDIO_DEBUG_COUNTER.fetch_add(1, Ordering::Relaxed);
 
                 // For system audio, ScreenCaptureKit delivers f32 samples directly
@@ -1080,25 +1197,25 @@ impl AecInputBridge {
                 let is_system_audio = audio_source == AudioSource::SystemAudio;
 
                 if !is_system_audio {
-                for _ in 0..100 {
-                    // Get audio from the appropriate capture source
-                    let audio_result = if using_aec {
-                        aec_capture.as_ref().and_then(|aec| aec.get_audio())
-                    } else {
-                        cpal_capture.get_audio()
-                    };
+                    for _ in 0..100 {
+                        // Get audio from the appropriate capture source
+                        let audio_result = if using_aec {
+                            aec_capture.as_ref().and_then(|aec| aec.get_audio())
+                        } else {
+                            cpal_capture.get_audio()
+                        };
 
-                    match audio_result {
-                        Some((samples_i16, vad)) => {
-                            // Convert i16 to f32 normalized
-                            let samples_f32: Vec<f32> =
-                                samples_i16.iter().map(|&s| s as f32 / 32768.0).collect();
-                            all_audio.extend(samples_f32);
-                            vad_results.push(vad);
+                        match audio_result {
+                            Some((samples_i16, vad)) => {
+                                // Convert i16 to f32 normalized
+                                let samples_f32: Vec<f32> =
+                                    samples_i16.iter().map(|&s| s as f32 / 32768.0).collect();
+                                all_audio.extend(samples_f32);
+                                vad_results.push(vad);
+                            }
+                            None => break,
                         }
-                        None => break,
                     }
-                }
                 }
 
                 // Log audio stats every 100 iterations (~1 second)
@@ -1204,8 +1321,7 @@ impl AecInputBridge {
 
                             info!(
                                 "Speech started (question_id={}, burst_id={})",
-                                vad_state.current_question_id,
-                                vad_state.current_burst_id
+                                vad_state.current_question_id, vad_state.current_burst_id
                             );
                             // Reset progressive timer when speech starts
                             vad_state.last_progressive_send_at = Some(Instant::now());
@@ -1306,8 +1422,7 @@ impl AecInputBridge {
                         "INFO",
                         &format!(
                             "🎤 NEW SPEECH STARTED - question_id={}, burst_id={}",
-                            vad_state.current_question_id,
-                            vad_state.current_burst_id
+                            vad_state.current_question_id, vad_state.current_burst_id
                         ),
                     );
                 }
@@ -1332,15 +1447,13 @@ impl AecInputBridge {
 
                 // Send audio segment for ASR
                 if let Some(segment) = audio_segment {
-                    if let Err(e) =
-                        Self::send_audio_segment(
-                            &mut node,
-                            &segment,
-                            vad_state.current_question_id,
-                            vad_state.current_burst_id,
-                            segment_reason.unwrap_or("speech_end"),
-                        )
-                    {
+                    if let Err(e) = Self::send_audio_segment(
+                        &mut node,
+                        &segment,
+                        vad_state.current_question_id,
+                        vad_state.current_burst_id,
+                        segment_reason.unwrap_or("speech_end"),
+                    ) {
                         warn!("Failed to send audio_segment: {}", e);
                     } else {
                         info!(
@@ -1458,10 +1571,7 @@ impl AecInputBridge {
             "question_id".to_string(),
             Parameter::Integer(question_id as i64),
         );
-        params.insert(
-            "burst_id".to_string(),
-            Parameter::Integer(burst_id as i64),
-        );
+        params.insert("burst_id".to_string(), Parameter::Integer(burst_id as i64));
         params.insert("sample_rate".to_string(), Parameter::Integer(16000));
         params.insert(
             "transcription_mode".to_string(),
@@ -1493,10 +1603,7 @@ impl AecInputBridge {
             "question_id".to_string(),
             Parameter::Integer(question_id as i64),
         );
-        params.insert(
-            "burst_id".to_string(),
-            Parameter::Integer(burst_id as i64),
-        );
+        params.insert("burst_id".to_string(), Parameter::Integer(burst_id as i64));
         params.insert("sample_rate".to_string(), Parameter::Integer(16000));
         params.insert(
             "transcription_mode".to_string(),
@@ -1516,7 +1623,12 @@ impl AecInputBridge {
     }
 
     /// Send log message to dora log output
-    fn send_log(node: &mut DoraNode, node_id: &str, level: &str, message: &str) -> BridgeResult<()> {
+    fn send_log(
+        node: &mut DoraNode,
+        node_id: &str,
+        level: &str,
+        message: &str,
+    ) -> BridgeResult<()> {
         let log_entry = serde_json::json!({
             "level": level,
             "message": message,
@@ -1610,7 +1722,9 @@ impl DoraBridge for AecInputBridge {
                 }
                 BridgeState::Error => {
                     error!("AecInputBridge connection failed");
-                    return Err(BridgeError::ConnectionFailed("Bridge failed to connect".to_string()));
+                    return Err(BridgeError::ConnectionFailed(
+                        "Bridge failed to connect".to_string(),
+                    ));
                 }
                 BridgeState::Connecting => {
                     // Still connecting, keep waiting
@@ -1619,14 +1733,18 @@ impl DoraBridge for AecInputBridge {
                 BridgeState::Disconnected | BridgeState::Disconnecting => {
                     // Worker thread exited without setting state
                     error!("AecInputBridge worker exited unexpectedly");
-                    return Err(BridgeError::ConnectionFailed("Worker thread exited".to_string()));
+                    return Err(BridgeError::ConnectionFailed(
+                        "Worker thread exited".to_string(),
+                    ));
                 }
             }
         }
 
         // Timeout - connection took too long
         error!("AecInputBridge connection timeout after {:?}", max_wait);
-        Err(BridgeError::ConnectionFailed("Connection timeout".to_string()))
+        Err(BridgeError::ConnectionFailed(
+            "Connection timeout".to_string(),
+        ))
     }
 
     fn disconnect(&mut self) -> BridgeResult<()> {
@@ -1655,10 +1773,8 @@ impl DoraBridge for AecInputBridge {
                             "start_recording" => Some(AecControlCommand::StartRecording),
                             "stop_recording" => Some(AecControlCommand::StopRecording),
                             "toggle_aec" | "set_aec_enabled" => {
-                                let enabled = val
-                                    .get("enabled")
-                                    .and_then(|v| v.as_bool())
-                                    .unwrap_or(true);
+                                let enabled =
+                                    val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
                                 Some(AecControlCommand::SetAecEnabled(enabled))
                             }
                             _ => None,
@@ -1722,6 +1838,11 @@ mod tests {
 
         assert_eq!(output.len(), 160);
         assert!((output[0] - input[0]).abs() < 1e-6);
-        assert!((output.last().copied().unwrap_or_default() - input.last().copied().unwrap_or_default()).abs() < 0.02);
+        assert!(
+            (output.last().copied().unwrap_or_default()
+                - input.last().copied().unwrap_or_default())
+            .abs()
+                < 0.02
+        );
     }
 }

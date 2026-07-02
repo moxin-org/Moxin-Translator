@@ -410,37 +410,27 @@ mod tests {
     fn test_parse_moxin_nodes() {
         let yaml = r#"
 nodes:
-  - id: tts
+  - id: translator
     operator:
-      python: ../../node-hub/dora-primespeech
+      path: ../../node-hub/dora-qwen35-translator
     outputs:
-      - audio
+      - translation
       - log
 
-  - id: moxin-audio-player
+  - id: moxin-translation-listener
     path: dynamic
     inputs:
-      audio: tts/audio
-    outputs:
-      - buffer_status
-
-  - id: moxin-system-log
-    path: dynamic
-    inputs:
-      tts_log: tts/log
+      translation: translator/translation
+      log: translator/log
 "#;
 
         let parsed = DataflowParser::parse_string(yaml, PathBuf::from("test.yml")).unwrap();
 
-        assert_eq!(parsed.moxin_nodes.len(), 2);
-        assert_eq!(parsed.moxin_nodes[0].id, "moxin-audio-player");
-        assert_eq!(parsed.moxin_nodes[1].id, "moxin-system-log");
+        assert_eq!(parsed.moxin_nodes.len(), 1);
+        assert_eq!(parsed.moxin_nodes[0].id, "moxin-translation-listener");
 
-        // log_sources includes: tts/log and moxin-audio-player/buffer_status
-        assert_eq!(parsed.log_sources.len(), 2);
-        assert_eq!(parsed.log_sources[0].node_id, "tts");
+        assert_eq!(parsed.log_sources.len(), 1);
+        assert_eq!(parsed.log_sources[0].node_id, "translator");
         assert_eq!(parsed.log_sources[0].output_id, "log");
-        assert_eq!(parsed.log_sources[1].node_id, "moxin-audio-player");
-        assert_eq!(parsed.log_sources[1].output_id, "buffer_status");
     }
 }

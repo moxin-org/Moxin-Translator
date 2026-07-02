@@ -1,6 +1,6 @@
 //! # Moxin Dora Bridge
 //!
-//! Communication layer between the Moxin Studio UI and the Dora dataflow runtime.
+//! Communication layer between the Moxin Translator UI and the Dora dataflow runtime.
 //! Provides thread-safe shared state, data types, and bridge infrastructure for
 //! real-time voice chat applications.
 //!
@@ -25,7 +25,7 @@
 //!           │          Read on UI timer (single poll)         │
 //!           ▼                      ▼                          ▼
 //! ┌─────────────────────────────────────────────────────────────────────────────┐
-//! │                        Moxin Studio UI (Main Thread)                         │
+//! │                      Moxin Translator UI (Main Thread)                       │
 //! │  poll_dora_state() - reads dirty data, updates widgets                      │
 //! └─────────────────────────────────────────────────────────────────────────────┘
 //! ```
@@ -121,9 +121,11 @@ pub use controller::{DataflowController, DataflowState};
 pub use data::{AudioData, ChatMessage, ControlCommand, DoraData, LogEntry, TranslationUpdate};
 pub use dispatcher::{DynamicNodeDispatcher, WidgetBinding};
 pub use error::{BridgeError, BridgeResult};
-pub use shared_state::{SharedDoraState, DoraStatus, ChatState, AudioState, DirtyVec, DirtyValue, MicState};
-pub use widgets::{AecControlCommand, AudioSource, TranslationListenerBridge};
 pub use parser::{DataflowParser, EnvRequirement, LogSource, ParsedDataflow, ParsedNode};
+pub use shared_state::{
+    AudioState, ChatState, DirtyValue, DirtyVec, DoraStatus, MicState, SharedDoraState,
+};
+pub use widgets::{AecControlCommand, AudioSource, TranslationListenerBridge};
 
 /// Prefix for Moxin built-in dynamic nodes in dataflow YAML
 pub const MOFA_NODE_PREFIX: &str = "moxin-";
@@ -145,7 +147,7 @@ pub enum MoxinNodeType {
     ParticipantPanel,
     /// ASR listener widget - receives transcription from ASR node
     AsrListener,
-    /// Audio input widget - sends audio to ASR (for voice cloning)
+    /// Audio input widget - sends audio to ASR
     AudioInput,
     /// Translation listener widget - receives source_text + translation from translator node
     TranslationListener,

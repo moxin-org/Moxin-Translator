@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Result};
 use minijinja::{context, Environment};
 use minijinja_contrib::pycompat::unknown_method_callback;
-use mlx_rs::ops::indexing::{IndexOp, NewAxis};
-use mlx_rs::transforms::eval;
 use mlx_lm_utils::tokenizer::{
     load_model_chat_template_from_file, ApplyChatTemplateArgs, Conversation, Tokenizer,
 };
+use mlx_rs::ops::indexing::{IndexOp, NewAxis};
+use mlx_rs::transforms::eval;
 use qwen3_5_35b_mlx::{load_model, Generate};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -69,9 +69,11 @@ fn resolve_model_path() -> PathBuf {
 fn load_eos_tokens(model_path: &std::path::Path) -> Result<HashSet<u32>> {
     let config_path = model_path.join("config.json");
     let config: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&config_path)?)?;
-    let eos_value = config
-        .get("eos_token_id")
-        .or_else(|| config.get("text_config").and_then(|v| v.get("eos_token_id")));
+    let eos_value = config.get("eos_token_id").or_else(|| {
+        config
+            .get("text_config")
+            .and_then(|v| v.get("eos_token_id"))
+    });
 
     let eos_tokens = match eos_value {
         Some(serde_json::Value::Array(ids)) => ids
@@ -158,8 +160,14 @@ fn render_prompt_with_enable_thinking(
         .map_err(|e| anyhow!("Failed to load compiled chat_template: {e}"))?;
 
     let messages = vec![
-        Conversation { role: "system", content: system_prompt },
-        Conversation { role: "user", content: user_text },
+        Conversation {
+            role: "system",
+            content: system_prompt,
+        },
+        Conversation {
+            role: "user",
+            content: user_text,
+        },
     ];
 
     let rendered = template
@@ -189,14 +197,22 @@ fn build_prompt_token_ids(
                 return Ok(encoding.get_ids().to_vec());
             }
             Err(e) => {
-                tracing::warn!("No-think template render failed, fallback to default template path: {e}");
+                tracing::warn!(
+                    "No-think template render failed, fallback to default template path: {e}"
+                );
             }
         }
     }
 
     let conversations: Vec<Conversation<&str, &str>> = vec![
-        Conversation { role: "system", content: system_prompt },
-        Conversation { role: "user", content: user_text },
+        Conversation {
+            role: "system",
+            content: system_prompt,
+        },
+        Conversation {
+            role: "user",
+            content: user_text,
+        },
     ];
     let args = ApplyChatTemplateArgs {
         conversations: vec![conversations.into()],
@@ -287,13 +303,19 @@ fn generate_text_completion(
         }
     }
 
-    unsafe { mlx_sys::mlx_clear_cache(); }
+    unsafe {
+        mlx_sys::mlx_clear_cache();
+    }
     Ok(full.trim().to_string())
 }
 
 fn extract_json_object(raw: &str) -> Result<&str> {
-    let start = raw.find('{').ok_or_else(|| anyhow!("No JSON object start found"))?;
-    let end = raw.rfind('}').ok_or_else(|| anyhow!("No JSON object end found"))?;
+    let start = raw
+        .find('{')
+        .ok_or_else(|| anyhow!("No JSON object start found"))?;
+    let end = raw
+        .rfind('}')
+        .ok_or_else(|| anyhow!("No JSON object end found"))?;
     if end < start {
         return Err(anyhow!("Malformed JSON object boundaries"));
     }
@@ -302,7 +324,9 @@ fn extract_json_object(raw: &str) -> Result<&str> {
 
 fn validate_structured_translation(raw_tail: &str, response: &StructuredTranslation) -> Result<()> {
     if raw_tail != format!("{}{}", response.result.raw_text, response.remaining) {
-        return Err(anyhow!("result.raw_text + remaining does not equal raw input"));
+        return Err(anyhow!(
+            "result.raw_text + remaining does not equal raw input"
+        ));
     }
     if !response.result.raw_text.trim().is_empty()
         && (response.result.text.trim().is_empty() || response.result.translation.trim().is_empty())
@@ -334,7 +358,9 @@ fn parse_args() -> Result<Args> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--mode" => {
-                let v = args.next().ok_or_else(|| anyhow!("missing value for --mode"))?;
+                let v = args
+                    .next()
+                    .ok_or_else(|| anyhow!("missing value for --mode"))?;
                 mode = match v.as_str() {
                     "normal" => CommitPromptMode::Normal,
                     "final-drain" => CommitPromptMode::FinalDrain,
@@ -342,7 +368,9 @@ fn parse_args() -> Result<Args> {
                 };
             }
             "--tgt-lang" => {
-                tgt_lang = args.next().ok_or_else(|| anyhow!("missing value for --tgt-lang"))?;
+                tgt_lang = args
+                    .next()
+                    .ok_or_else(|| anyhow!("missing value for --tgt-lang"))?;
             }
             "--max-tokens" => {
                 max_tokens = args
@@ -358,11 +386,14 @@ fn parse_args() -> Result<Args> {
             }
             "--model-path" => {
                 model_path = Some(PathBuf::from(
-                    args.next().ok_or_else(|| anyhow!("missing value for --model-path"))?,
+                    args.next()
+                        .ok_or_else(|| anyhow!("missing value for --model-path"))?,
                 ));
             }
             "--file" => {
-                let path = args.next().ok_or_else(|| anyhow!("missing value for --file"))?;
+                let path = args
+                    .next()
+                    .ok_or_else(|| anyhow!("missing value for --file"))?;
                 input = Some(std::fs::read_to_string(path)?.trim().to_string());
             }
             _ => {
@@ -457,9 +488,9 @@ fn main() -> Result<()> {
     println!("=== USER_PROMPT ===\n{}\n", user_prompt);
     println!("=== MODEL_OUTPUT_RAW ===\n{}\n", output);
 
-    match extract_json_object(&output)
-        .and_then(|json| serde_json::from_str::<StructuredTranslation>(json).map_err(|e| anyhow!(e)))
-    {
+    match extract_json_object(&output).and_then(|json| {
+        serde_json::from_str::<StructuredTranslation>(json).map_err(|e| anyhow!(e))
+    }) {
         Ok(parsed) => {
             println!("=== PARSED_JSON ===\n{:#?}\n", parsed);
             match validate_structured_translation(&args.input, &parsed) {

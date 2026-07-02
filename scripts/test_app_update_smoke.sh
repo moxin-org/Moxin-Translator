@@ -9,11 +9,11 @@ MODE="fake-install"
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") --app </path/to/Moxin Voice.app> --dmg </path/to/update.dmg> --version <x.y.z> [--mode fake-install|real-install]
+  $(basename "$0") --app </path/to/Moxin Translator.app> --dmg </path/to/update.dmg> --version <x.y.z> [--mode fake-install|real-install]
 
 Examples:
-  $(basename "$0") --app "/Applications/Moxin Voice.app" --dmg "./dist/Moxin-Voice-v0.0.6.dmg" --version 0.0.6
-  $(basename "$0") --app "./dist/Moxin Voice.app" --dmg "./dist/Moxin-Voice-v0.0.6.dmg" --version 0.0.6 --mode real-install
+  $(basename "$0") --app "/Applications/Moxin Translator.app" --dmg "./dist/Moxin-Translator-v0.0.6.dmg" --version 0.0.6
+  $(basename "$0") --app "./dist/Moxin Translator.app" --dmg "./dist/Moxin-Translator-v0.0.6.dmg" --version 0.0.6 --mode real-install
 EOF
 }
 
@@ -64,7 +64,7 @@ fi
 
 APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 DMG_PATH="$(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
-APP_LAUNCHER="$APP_PATH/Contents/MacOS/moxin-voice-shell"
+APP_LAUNCHER="$APP_PATH/Contents/MacOS/moxin-translator"
 
 if [[ ! -x "$APP_LAUNCHER" ]]; then
   echo "App launcher not found or not executable: $APP_LAUNCHER" >&2
@@ -82,7 +82,7 @@ APP_STDERR="$TEST_ROOT/app.stderr.log"
 mkdir -p "$CACHE_DIR"
 
 cat > "$RELEASE_JSON" <<EOF
-{"tag_name":"v$VERSION","assets":[{"name":"Moxin-Voice-v$VERSION.dmg","browser_download_url":"file://$DMG_PATH"}]}
+{"tag_name":"v$VERSION","assets":[{"name":"Moxin-Translator-v$VERSION.dmg","browser_download_url":"file://$DMG_PATH"}]}
 EOF
 
 cat > "$INSTALL_SCRIPT" <<EOF

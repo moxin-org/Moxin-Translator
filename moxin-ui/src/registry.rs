@@ -272,7 +272,11 @@ mod tests {
         let mut registry = MoxinWidgetRegistry::new();
 
         registry.register(MoxinWidgetDef::new("mic", "Mic", WidgetCategory::Audio));
-        registry.register(MoxinWidgetDef::new("speaker", "Speaker", WidgetCategory::Audio));
+        registry.register(MoxinWidgetDef::new(
+            "speaker",
+            "Speaker",
+            WidgetCategory::Audio,
+        ));
         registry.register(MoxinWidgetDef::new("chat", "Chat", WidgetCategory::Chat));
 
         let audio = registry.by_category(&WidgetCategory::Audio);
@@ -287,8 +291,16 @@ mod tests {
         let mut registry = MoxinWidgetRegistry::new();
 
         registry.register(MoxinWidgetDef::new("first", "First", WidgetCategory::Audio));
-        registry.register(MoxinWidgetDef::new("second", "Second", WidgetCategory::Chat));
-        registry.register(MoxinWidgetDef::new("third", "Third", WidgetCategory::Config));
+        registry.register(MoxinWidgetDef::new(
+            "second",
+            "Second",
+            WidgetCategory::Chat,
+        ));
+        registry.register(MoxinWidgetDef::new(
+            "third",
+            "Third",
+            WidgetCategory::Config,
+        ));
 
         let all = registry.all();
         assert_eq!(all[0].id, "first");

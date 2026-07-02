@@ -17,7 +17,7 @@
 //! │  [pending ASR text - small, amber]           │  ↓
 //! │  (bottom_spacer — dynamic, for anchor)       │
 //! ├──────────────────────────────────────────────┤
-//! │              Moxin Voice — ...               │  footer (font configurable)
+//! │              Moxin Translator - ...          │  footer (font configurable)
 //! └──────────────────────────────────────────────┘
 //! ```
 //!
@@ -131,7 +131,7 @@ live_design! {
                         color: (MOXIN_TEXT_MUTED_DARK)
                         text_style: <FONT_REGULAR> { font_size: 10.0 }
                     }
-                    text: "Moxin Voice - Fully Offline Live Translation, Powered by OminiX MLX"
+                    text: "Moxin Translator - Fully offline live translation, private by design"
                 }
             }
 
@@ -369,6 +369,9 @@ pub struct TranslationOverlay {
     #[rust]
     passthrough: bool,
 
+    #[rust(true)]
+    locale_en: bool,
+
     #[rust]
     status: String,
 }
@@ -405,7 +408,11 @@ impl Widget for TranslationOverlay {
                 .set_scroll_pos(cx, dvec2(0.0, 0.0));
         } else if self.pending_scroll {
             self.pending_scroll = false;
-            let target_y = if self.follow_tail_scroll { f64::MAX } else { 0.0 };
+            let target_y = if self.follow_tail_scroll {
+                f64::MAX
+            } else {
+                0.0
+            };
             self.view
                 .view(ids!(content_scroll))
                 .set_scroll_pos(cx, dvec2(0.0, target_y));
@@ -437,7 +444,7 @@ impl TranslationOverlay {
     }
 
     fn footer_font_size_value(preset: &str) -> f64 {
-        preset.parse().unwrap_or(10.0)
+        preset.parse().unwrap_or(20.0)
     }
 
     fn footer_logo_size_value(preset: &str) -> f64 {
@@ -455,14 +462,16 @@ impl TranslationOverlay {
     }
 
     fn update_font_size_draw_styles(&self, cx: &mut Cx) {
-        let (history_size, pending_size) =
-            Self::font_size_preset_values(&self.font_size_preset);
+        let (history_size, pending_size) = Self::font_size_preset_values(&self.font_size_preset);
         self.view
             .translation_history(ids!(content_scroll.history_flow))
             .set_font_sizes(cx, history_size, pending_size);
         self.view
             .label(ids!(content_scroll.pending_label))
-            .apply_over(cx, live! { draw_text: { text_style: { font_size: (pending_size) } } });
+            .apply_over(
+                cx,
+                live! { draw_text: { text_style: { font_size: (pending_size) } } },
+            );
     }
 
     fn update_footer_font_size_draw_styles(&self, cx: &mut Cx) {
@@ -470,10 +479,32 @@ impl TranslationOverlay {
         let logo_size = Self::footer_logo_size_value(&self.footer_font_size_preset);
         self.view
             .label(ids!(overlay_footer.footer_brand.footer_label))
-            .apply_over(cx, live! { draw_text: { text_style: { font_size: (size) } } });
+            .apply_over(
+                cx,
+                live! { draw_text: { text_style: { font_size: (size) } } },
+            );
         self.view
             .image(ids!(overlay_footer.footer_brand.footer_logo))
             .apply_over(cx, live! { width: (logo_size), height: (logo_size) });
+    }
+
+    fn footer_brand_text(locale_en: bool) -> &'static str {
+        if locale_en {
+            "Moxin Translator - Fully offline live translation, private by design"
+        } else {
+            "Moxin 实时翻译 - 完全离线本地部署，隐私优先"
+        }
+    }
+
+    pub fn set_locale(&mut self, cx: &mut Cx, locale_en: bool) {
+        if self.locale_en == locale_en {
+            return;
+        }
+        self.locale_en = locale_en;
+        self.view
+            .label(ids!(overlay_footer.footer_brand.footer_label))
+            .set_text(cx, Self::footer_brand_text(locale_en));
+        self.view.redraw(cx);
     }
 
     pub fn set_status(&mut self, cx: &mut Cx, status: &str) {
@@ -546,11 +577,9 @@ impl TranslationOverlay {
         } else {
             0.0
         };
-        let content_without_spacer =
-            Self::SCROLL_PADDING_TOP + history_height + pending_block_h;
+        let content_without_spacer = Self::SCROLL_PADDING_TOP + history_height + pending_block_h;
         let anchor_ratio = Self::anchor_position_ratio(&self.anchor_position_preset);
-        self.follow_tail_scroll =
-            content_without_spacer > viewport_h * anchor_ratio;
+        self.follow_tail_scroll = content_without_spacer > viewport_h * anchor_ratio;
         let mut spacer_h =
             Self::compute_anchor_spacer_height(viewport_h, content_without_spacer, anchor_ratio);
 
@@ -565,9 +594,12 @@ impl TranslationOverlay {
         // Always write spacer (including 0) to avoid stale initial/default values.
         self.view
             .view(ids!(content_scroll.bottom_spacer))
-            .apply_over(cx, live! {
-                height: (spacer_h)
-            });
+            .apply_over(
+                cx,
+                live! {
+                    height: (spacer_h)
+                },
+            );
         if changed {
             // Spacer changed => request one more bottom snap on the next frame so
             // scroll position matches the new layout.
@@ -632,9 +664,12 @@ impl TranslationOverlay {
 
     /// Set overlay background opacity (0.0 = fully transparent, 1.0 = opaque).
     pub fn set_opacity(&mut self, cx: &mut Cx, opacity: f64) {
-        self.view.apply_over(cx, live! {
-            draw_bg: { bg_opacity: (opacity) }
-        });
+        self.view.apply_over(
+            cx,
+            live! {
+                draw_bg: { bg_opacity: (opacity) }
+            },
+        );
         self.view.redraw(cx);
     }
 
@@ -736,16 +771,10 @@ mod tests {
         let viewport = 216.0;
         let short_content = 100.0;
         let long_content = 280.0;
-        let short_spacer = TranslationOverlay::compute_anchor_spacer_height(
-            viewport,
-            short_content,
-            0.5,
-        );
-        let long_spacer = TranslationOverlay::compute_anchor_spacer_height(
-            viewport,
-            long_content,
-            0.5,
-        );
+        let short_spacer =
+            TranslationOverlay::compute_anchor_spacer_height(viewport, short_content, 0.5);
+        let long_spacer =
+            TranslationOverlay::compute_anchor_spacer_height(viewport, long_content, 0.5);
         assert!(short_spacer < long_spacer);
     }
 
@@ -776,6 +805,7 @@ mod tests {
     #[test]
     fn footer_font_size_value_parses_known_presets() {
         assert_eq!(TranslationOverlay::footer_font_size_value("10"), 10.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value("20"), 20.0);
         assert_eq!(TranslationOverlay::footer_font_size_value("16"), 16.0);
     }
 
@@ -799,8 +829,8 @@ mod tests {
 
     #[test]
     fn footer_font_size_value_falls_back_when_invalid() {
-        assert_eq!(TranslationOverlay::footer_font_size_value(""), 10.0);
-        assert_eq!(TranslationOverlay::footer_font_size_value("abc"), 10.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value(""), 20.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value("abc"), 20.0);
     }
 
     #[test]
@@ -876,12 +906,7 @@ mod tests {
 
 impl TranslationOverlayRef {
     /// Update with sentence history and pending ASR text
-    pub fn set_translation_update(
-        &self,
-        cx: &mut Cx,
-        history: &[(String, String)],
-        pending: &str,
-    ) {
+    pub fn set_translation_update(&self, cx: &mut Cx, history: &[(String, String)], pending: &str) {
         if let Some(mut inner) = self.borrow_mut() {
             inner.set_translation_update(cx, history, pending);
         }
@@ -927,6 +952,12 @@ impl TranslationOverlayRef {
     pub fn set_status(&self, cx: &mut Cx, status: &str) {
         if let Some(mut inner) = self.borrow_mut() {
             inner.set_status(cx, status);
+        }
+    }
+
+    pub fn set_locale(&self, cx: &mut Cx, locale_en: bool) {
+        if let Some(mut inner) = self.borrow_mut() {
+            inner.set_locale(cx, locale_en);
         }
     }
 
