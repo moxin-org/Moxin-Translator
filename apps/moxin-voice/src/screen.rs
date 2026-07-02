@@ -2374,49 +2374,143 @@ live_design! {
                             // TTS parameter controls moved from right panel
                             param_controls = <View> {
                                 width: Fill, height: Fit
-                                flow: Down
-                                spacing: 8
+                                flow: Right
+                                spacing: 10
                                 visible: false
 
-                                // Speed slider
-                                speed_row = <View> {
-                                    width: Fill, height: Fit
+                                param_header_column = <View> {
+                                    width: Fit, height: Fit
                                     flow: Right
-                                    align: {y: 0.5}
-                                    spacing: 10
+                                    spacing: 8
 
-                                    speed_header = <View> {
-                                        width: 92, height: Fit
-                                        flow: Right
-                                        align: {y: 0.5}
+                                    param_label_column = <View> {
+                                        width: Fit, height: Fit
+                                        flow: Down
+                                        spacing: 8
 
-                                        speed_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                        speed_label_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            speed_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                    fn get_color(self) -> vec4 {
+                                                        return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                                    }
                                                 }
+                                                text: "Speed"
                                             }
-                                            text: "Speed"
                                         }
-                                        <View> { width: Fill, height: 1 }
-                                        speed_value = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 10.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+
+                                        pitch_label_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            pitch_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                    fn get_color(self) -> vec4 {
+                                                        return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                                    }
                                                 }
+                                                text: "Pitch"
                                             }
-                                            text: "1.0x"
+                                        }
+
+                                        volume_label_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            volume_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                    fn get_color(self) -> vec4 {
+                                                        return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
+                                                    }
+                                                }
+                                                text: "Volume"
+                                            }
                                         }
                                     }
 
+                                    param_value_column = <View> {
+                                        width: Fit, height: Fit
+                                        flow: Down
+                                        spacing: 8
+
+                                        speed_value_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            speed_value = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 10.0 }
+                                                    fn get_color(self) -> vec4 {
+                                                        return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                                    }
+                                                }
+                                                text: "1.0x"
+                                            }
+                                        }
+
+                                        pitch_value_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            pitch_value = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 10.0 }
+                                                    fn get_color(self) -> vec4 {
+                                                        return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                                    }
+                                                }
+                                                text: "0"
+                                            }
+                                        }
+
+                                        volume_value_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            volume_value = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 10.0 }
+                                                    fn get_color(self) -> vec4 {
+                                                        return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
+                                                    }
+                                                }
+                                                text: "100%"
+                                            }
+                                        }
+                                    }
+                                }
+
+                                param_slider_column = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+                                    spacing: 8
+
                                     speed_slider_row = <View> {
-                                        width: Fill, height: Fit
+                                        width: Fill, height: 24
                                         flow: Right
                                         align: {y: 0.5}
                                         spacing: 6
@@ -2461,47 +2555,9 @@ live_design! {
                                             }
                                         }
                                     }
-                                }
-
-                                // Pitch slider
-                                pitch_row = <View> {
-                                    width: Fill, height: Fit
-                                    flow: Right
-                                    align: {y: 0.5}
-                                    spacing: 10
-
-                                    pitch_header = <View> {
-                                        width: 92, height: Fit
-                                        flow: Right
-                                        align: {y: 0.5}
-
-                                        pitch_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
-                                                }
-                                            }
-                                            text: "Pitch"
-                                        }
-                                        <View> { width: Fill, height: 1 }
-                                        pitch_value = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 10.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
-                                                }
-                                            }
-                                            text: "0"
-                                        }
-                                    }
 
                                     pitch_slider_row = <View> {
-                                        width: Fill, height: Fit
+                                        width: Fill, height: 24
                                         flow: Right
                                         align: {y: 0.5}
                                         spacing: 6
@@ -2546,47 +2602,9 @@ live_design! {
                                             }
                                         }
                                     }
-                                }
-
-                                // Volume slider
-                                volume_row = <View> {
-                                    width: Fill, height: Fit
-                                    flow: Right
-                                    align: {y: 0.5}
-                                    spacing: 10
-
-                                    volume_header = <View> {
-                                        width: 92, height: Fit
-                                        flow: Right
-                                        align: {y: 0.5}
-
-                                        volume_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
-                                                }
-                                            }
-                                            text: "Volume"
-                                        }
-                                        <View> { width: Fill, height: 1 }
-                                        volume_value = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 10.0 }
-                                                fn get_color(self) -> vec4 {
-                                                    return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode);
-                                                }
-                                            }
-                                            text: "100%"
-                                        }
-                                    }
 
                                     volume_slider_row = <View> {
-                                        width: Fill, height: Fit
+                                        width: Fill, height: 24
                                         flow: Right
                                         align: {y: 0.5}
                                         spacing: 6
@@ -2969,42 +2987,130 @@ live_design! {
 
                             param_controls = <View> {
                                 width: Fill, height: Fit
-                                flow: Down
+                                flow: Right
                                 spacing: 10
 
-                                speed_row = <View> {
-                                    width: Fill, height: Fit
+                                param_header_column = <View> {
+                                    width: Fit, height: Fit
                                     flow: Right
-                                    align: {y: 0.5}
                                     spacing: 10
 
-                                    speed_header = <View> {
-                                        width: 92, height: Fit
-                                        flow: Right
-                                        align: {y: 0.5}
-                                        speed_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                                fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                    param_label_column = <View> {
+                                        width: Fit, height: Fit
+                                        flow: Down
+                                        spacing: 10
+
+                                        speed_label_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            speed_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Speed"
                                             }
-                                            text: "Speed"
                                         }
-                                        <View> { width: Fill, height: 1 }
-                                        speed_value = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 10.0 }
-                                                fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+
+                                        pitch_label_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            pitch_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Pitch"
                                             }
-                                            text: "1.0x"
+                                        }
+
+                                        volume_label_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            volume_label = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "Volume"
+                                            }
                                         }
                                     }
 
+                                    param_value_column = <View> {
+                                        width: Fit, height: Fit
+                                        flow: Down
+                                        spacing: 10
+
+                                        speed_value_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            speed_value = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 10.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "1.0x"
+                                            }
+                                        }
+
+                                        pitch_value_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            pitch_value = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 10.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "0"
+                                            }
+                                        }
+
+                                        volume_value_row = <View> {
+                                            width: Fit, height: 24
+                                            flow: Right
+                                            align: {y: 0.5}
+
+                                            volume_value = <Label> {
+                                                width: Fit, height: Fit
+                                                draw_text: {
+                                                    instance dark_mode: 0.0
+                                                    text_style: { font_size: 10.0 }
+                                                    fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
+                                                }
+                                                text: "100%"
+                                            }
+                                        }
+                                    }
+                                }
+
+                                param_slider_column = <View> {
+                                    width: Fill, height: Fit
+                                    flow: Down
+                                    spacing: 10
+
                                     speed_slider_row = <View> {
-                                        width: Fill, height: Fit
+                                        width: Fill, height: 24
                                         flow: Right
                                         align: {y: 0.5}
                                         spacing: 6
@@ -3040,39 +3146,9 @@ live_design! {
                                             }
                                         }
                                     }
-                                }
 
-                                pitch_row = <View> {
-                                    width: Fill, height: Fit
-                                    flow: Right
-                                    align: {y: 0.5}
-                                    spacing: 10
-                                    pitch_header = <View> {
-                                        width: 92, height: Fit
-                                        flow: Right
-                                        align: {y: 0.5}
-                                        pitch_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                                fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
-                                            }
-                                            text: "Pitch"
-                                        }
-                                        <View> { width: Fill, height: 1 }
-                                        pitch_value = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 10.0 }
-                                                fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
-                                            }
-                                            text: "0"
-                                        }
-                                    }
                                     pitch_slider_row = <View> {
-                                        width: Fill, height: Fit
+                                        width: Fill, height: 24
                                         flow: Right
                                         align: {y: 0.5}
                                         spacing: 6
@@ -3108,39 +3184,9 @@ live_design! {
                                             }
                                         }
                                     }
-                                }
 
-                                volume_row = <View> {
-                                    width: Fill, height: Fit
-                                    flow: Right
-                                    align: {y: 0.5}
-                                    spacing: 10
-                                    volume_header = <View> {
-                                        width: 92, height: Fit
-                                        flow: Right
-                                        align: {y: 0.5}
-                                        volume_label = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
-                                                fn get_color(self) -> vec4 { return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode); }
-                                            }
-                                            text: "Volume"
-                                        }
-                                        <View> { width: Fill, height: 1 }
-                                        volume_value = <Label> {
-                                            width: Fit, height: Fit
-                                            draw_text: {
-                                                instance dark_mode: 0.0
-                                                text_style: { font_size: 10.0 }
-                                                fn get_color(self) -> vec4 { return mix((TEXT_TERTIARY), (TEXT_TERTIARY_DARK), self.dark_mode); }
-                                            }
-                                            text: "100%"
-                                        }
-                                    }
                                     volume_slider_row = <View> {
-                                        width: Fill, height: Fit
+                                        width: Fill, height: 24
                                         flow: Right
                                         align: {y: 0.5}
                                         spacing: 6
@@ -7270,34 +7316,16 @@ live_design! {
                         width: Fill, height: Fit
                         flow: Right
 
-                        voice_name_scroller = <View> {
-                            width: Fit, height: Fit
-                            flow: Right
-                            spacing: 24
-
-                            current_voice_name = <Label> {
-                                width: Fit, height: Fit
-                                draw_text: {
-                                    instance dark_mode: 0.0
-                                    text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
-                                    fn get_color(self) -> vec4 {
-                                        return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
-                                    }
+                        current_voice_name = <Label> {
+                            width: Fill, height: Fit
+                            draw_text: {
+                                instance dark_mode: 0.0
+                                text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
+                                fn get_color(self) -> vec4 {
+                                    return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
                                 }
-                                text: "Doubao"
                             }
-
-                            current_voice_name_clone = <Label> {
-                                width: Fit, height: Fit
-                                draw_text: {
-                                    instance dark_mode: 0.0
-                                    text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
-                                    fn get_color(self) -> vec4 {
-                                        return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
-                                    }
-                                }
-                                text: "Doubao"
-                            }
+                            text: "Doubao"
                         }
                     }
 
@@ -9162,8 +9190,6 @@ pub struct TTSScreen {
     #[rust]
     current_voice_name: String,
     #[rust]
-    voice_name_marquee_offset: f64,
-    #[rust]
     selected_voice_id: Option<String>,
     #[rust]
     generated_voice_id: Option<String>,
@@ -9520,7 +9546,6 @@ impl Widget for TTSScreen {
             self.current_voice_name = "Doubao".to_string();
             self.selected_voice_id = Some("Doubao".to_string());
             self.generated_voice_id = None;
-            self.voice_name_marquee_offset = 0.0;
             self.pending_generation_voice_id = None;
             self.pending_generation_text = None;
             self.pending_generation_model_id = None;
@@ -10238,7 +10263,6 @@ impl Widget for TTSScreen {
                 self.view.redraw(cx);
             }
 
-            self.update_voice_name_marquee(cx);
         }
 
         // MoxinHero actions not used in Moxin UI (dataflow auto-starts)
@@ -11061,7 +11085,7 @@ impl Widget for TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .speed_row
+                    .param_slider_column
                     .speed_slider_row
                     .speed_slider
             ))
@@ -11080,7 +11104,7 @@ impl Widget for TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .pitch_row
+                    .param_slider_column
                     .pitch_slider_row
                     .pitch_slider
             ))
@@ -11099,7 +11123,7 @@ impl Widget for TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .volume_row
+                    .param_slider_column
                     .volume_slider_row
                     .volume_slider
             ))
@@ -15800,8 +15824,9 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .speed_row
-                    .speed_header
+                    .param_header_column
+                    .param_label_column
+                    .speed_label_row
                     .speed_label
             ))
             .set_text(cx, self.tr("语速", "Speed"));
@@ -15816,7 +15841,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .speed_row
+                    .param_slider_column
                     .speed_slider_row
                     .speed_min_slot
                     .slower_label
@@ -15833,7 +15858,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .speed_row
+                    .param_slider_column
                     .speed_slider_row
                     .speed_max_slot
                     .faster_label
@@ -15850,8 +15875,9 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .pitch_row
-                    .pitch_header
+                    .param_header_column
+                    .param_label_column
+                    .pitch_label_row
                     .pitch_label
             ))
             .set_text(cx, self.tr("音调", "Pitch"));
@@ -15866,7 +15892,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .pitch_row
+                    .param_slider_column
                     .pitch_slider_row
                     .pitch_min_slot
                     .lower_label
@@ -15883,7 +15909,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .pitch_row
+                    .param_slider_column
                     .pitch_slider_row
                     .pitch_max_slot
                     .higher_label
@@ -15900,8 +15926,9 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .volume_row
-                    .volume_header
+                    .param_header_column
+                    .param_label_column
+                    .volume_label_row
                     .volume_label
             ))
             .set_text(cx, self.tr("音量", "Volume"));
@@ -15916,7 +15943,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .volume_row
+                    .param_slider_column
                     .volume_slider_row
                     .volume_min_slot
                     .quiet_label
@@ -15933,7 +15960,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .volume_row
+                    .param_slider_column
                     .volume_slider_row
                     .volume_max_slot
                     .loud_label
@@ -18416,19 +18443,7 @@ impl TTSScreen {
                     .voice_info
                     .voice_name_container
                     .voice_name_clip
-                    .voice_name_scroller
                     .current_voice_name
-            ))
-            .set_text(cx, voice_name);
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .audio_player_bar
-                    .voice_info
-                    .voice_name_container
-                    .voice_name_clip
-                    .voice_name_scroller
-                    .current_voice_name_clone
             ))
             .set_text(cx, voice_name);
         self.view
@@ -18440,106 +18455,6 @@ impl TTSScreen {
                     .avatar_initial
             ))
             .set_text(cx, &initial);
-        self.reset_voice_name_marquee(cx);
-    }
-
-    fn reset_voice_name_marquee(&mut self, cx: &mut Cx) {
-        self.voice_name_marquee_offset = 0.0;
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .audio_player_bar
-                    .voice_info
-                    .voice_name_container
-                    .voice_name_clip
-                    .voice_name_scroller
-            ))
-            .apply_over(cx, live! { margin: { left: 0.0 } });
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .audio_player_bar
-                    .voice_info
-                    .voice_name_container
-                    .voice_name_clip
-                    .voice_name_scroller
-                    .current_voice_name_clone
-            ))
-            .set_visible(cx, false);
-    }
-
-    fn update_voice_name_marquee(&mut self, cx: &mut Cx) {
-        let clip = self.view.view(ids!(
-            content_wrapper
-                .audio_player_bar
-                .voice_info
-                .voice_name_container
-                .voice_name_clip
-        ));
-        let label = self.view.label(ids!(
-            content_wrapper
-                .audio_player_bar
-                .voice_info
-                .voice_name_container
-                .voice_name_clip
-                .voice_name_scroller
-                .current_voice_name
-        ));
-        let clone = self.view.label(ids!(
-            content_wrapper
-                .audio_player_bar
-                .voice_info
-                .voice_name_container
-                .voice_name_clip
-                .voice_name_scroller
-                .current_voice_name_clone
-        ));
-        let scroller = self.view.view(ids!(
-            content_wrapper
-                .audio_player_bar
-                .voice_info
-                .voice_name_container
-                .voice_name_clip
-                .voice_name_scroller
-        ));
-
-        let clip_area = clip.area();
-        let label_area = label.area();
-        if clip_area.is_empty() || label_area.is_empty() {
-            return;
-        }
-
-        let clip_width = clip_area.rect(cx).size.x.max(0.0);
-        let label_width = label_area.rect(cx).size.x.max(0.0);
-        if clip_width <= 1.0 || label_width <= 1.0 {
-            return;
-        }
-
-        if label_width <= clip_width - 2.0 {
-            if self.voice_name_marquee_offset != 0.0 {
-                self.voice_name_marquee_offset = 0.0;
-                scroller.apply_over(cx, live! { margin: { left: 0.0 } });
-            }
-            clone.set_visible(cx, false);
-            return;
-        }
-
-        clone.set_visible(cx, true);
-
-        let dt = 0.1;
-        let speed = 15.0;
-        let gap = 24.0;
-        let max_offset = label_width + gap;
-        self.voice_name_marquee_offset += speed * dt;
-        if self.voice_name_marquee_offset >= max_offset {
-            self.voice_name_marquee_offset -= max_offset;
-        }
-
-        scroller.apply_over(
-            cx,
-            live! { margin: { left: (-self.voice_name_marquee_offset) } },
-        );
-        self.view.redraw(cx);
     }
 
     fn apply_voice_to_player_bar(
@@ -24310,8 +24225,9 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .speed_row
-                    .speed_header
+                    .param_header_column
+                    .param_value_column
+                    .speed_value_row
                     .speed_value
             ))
             .set_text(cx, &format!("{:.2}x", self.tts_speed));
@@ -24326,8 +24242,9 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .pitch_row
-                    .pitch_header
+                    .param_header_column
+                    .param_value_column
+                    .pitch_value_row
                     .pitch_value
             ))
             .set_text(cx, &pitch_text);
@@ -24342,8 +24259,9 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .volume_row
-                    .volume_header
+                    .param_header_column
+                    .param_value_column
+                    .volume_value_row
                     .volume_value
             ))
             .set_text(cx, &format!("{:.0}%", self.tts_volume));
@@ -24359,7 +24277,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .speed_row
+                    .param_slider_column
                     .speed_slider_row
                     .speed_slider
             ))
@@ -24384,7 +24302,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .pitch_row
+                    .param_slider_column
                     .pitch_slider_row
                     .pitch_slider
             ))
@@ -24409,7 +24327,7 @@ impl TTSScreen {
                     .input_section
                     .settings_flyout
                     .param_controls
-                    .volume_row
+                    .param_slider_column
                     .volume_slider_row
                     .volume_slider
             ))
@@ -28371,6 +28289,82 @@ mod tests {
 
         assert!(source.contains("tts_instruct_input().area().rect(cx).contains(md.abs)"));
         assert!(source.contains("TtsInputDragTarget::Instruct"));
+    }
+
+    #[test]
+    fn tts_param_value_labels_size_to_their_text() {
+        let live_design = include_str!("screen.rs")
+            .split("#[derive(Live, LiveHook, Widget)]")
+            .next()
+            .unwrap();
+
+        assert_eq!(
+            live_design.matches("param_header_column = <View>").count(),
+            2
+        );
+        assert_eq!(
+            live_design.matches("param_label_column = <View>").count(),
+            2
+        );
+        assert_eq!(
+            live_design.matches("param_value_column = <View>").count(),
+            2
+        );
+        assert_eq!(
+            live_design.matches("param_slider_column = <View>").count(),
+            2
+        );
+        assert_eq!(live_design.matches("speed_value = <Label>").count(), 2);
+        assert_eq!(live_design.matches("volume_value = <Label>").count(), 2);
+
+        for marker in [
+            "speed_label_row = <View>",
+            "pitch_label_row = <View>",
+            "volume_label_row = <View>",
+            "speed_value_row = <View>",
+            "pitch_value_row = <View>",
+            "volume_value_row = <View>",
+        ] {
+            for block in live_design.split(marker).skip(1).map(|tail| &tail[..tail.len().min(700)]) {
+                assert!(
+                    block.contains("width: Fit, height: Fit"),
+                    "{marker} should size its text content without fixed text width"
+                );
+                assert!(
+                    !block.contains("<View> { width: Fill, height: 1 }"),
+                    "{marker} should not use a fill spacer that can squeeze text"
+                );
+            }
+        }
+
+        for marker in [
+            "speed_value = <Label>",
+            "pitch_value = <Label>",
+            "volume_value = <Label>",
+        ] {
+            for block in live_design.split(marker).skip(1).map(|tail| &tail[..tail.len().min(220)]) {
+                assert!(
+                    block.contains("width: Fit, height: Fit"),
+                    "{marker} should not have a fixed pixel width"
+                );
+                assert!(
+                    !block.contains("align: {x: 1.0}"),
+                    "{marker} should not rely on right alignment inside a fixed box"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn player_voice_name_is_single_static_label() {
+        let source = include_str!("screen.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .unwrap();
+
+        assert!(!source.contains("current_voice_name_clone"));
+        assert!(!source.contains("voice_name_marquee"));
+        assert!(!source.contains("voice_name_scroller"));
     }
 
     #[test]
