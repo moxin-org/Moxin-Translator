@@ -369,6 +369,14 @@ pub struct TranslationOverlay {
     #[rust]
     passthrough: bool,
 
+    /// Language used for the idle sample text shown before translation starts.
+    #[rust]
+    placeholder_lang: String,
+
+    /// True when the overlay is showing its idle sample rather than runtime text.
+    #[rust]
+    idle_placeholder_visible: bool,
+
     #[rust(true)]
     locale_en: bool,
 
@@ -496,6 +504,43 @@ impl TranslationOverlay {
         }
     }
 
+    fn idle_placeholder_text(lang: &str) -> &'static str {
+        match lang {
+            "zh" => "本地 AI 正在待命，字幕和声音只留在你的设备上。",
+            "ja" => "ローカルAIが待機中です。字幕と音声は端末内に留まります。",
+            "fr" => "L'IA locale est prête. Voix et sous-titres restent sur cet appareil.",
+            _ => "Local AI is ready. Subtitles and voice stay on this device.",
+        }
+    }
+
+    fn has_runtime_content(&self) -> bool {
+        self.last_history_len > 0 || self.pending_active || !self.last_pending_text.is_empty()
+    }
+
+    fn show_idle_placeholder_if_empty(&mut self, cx: &mut Cx) {
+        if self.has_runtime_content() {
+            return;
+        }
+        self.idle_placeholder_visible = true;
+        self.pending_active = false;
+        self.follow_tail_scroll = false;
+        self.pending_only_mode = false;
+        self.pending_scroll = true;
+        self.last_spacer_height = -1.0;
+        self.view
+            .translation_history(ids!(content_scroll.history_flow))
+            .set_segments(
+                cx,
+                vec![HistorySegment::translation(Self::idle_placeholder_text(
+                    &self.placeholder_lang,
+                ))],
+            );
+        let pending_label = self.view.label(ids!(content_scroll.pending_label));
+        pending_label.set_text(cx, "");
+        pending_label.apply_over(cx, live! { margin: { top: 0.0, bottom: 0.0 } });
+        self.view.redraw(cx);
+    }
+
     pub fn set_locale(&mut self, cx: &mut Cx, locale_en: bool) {
         if self.locale_en == locale_en {
             return;
@@ -504,11 +549,17 @@ impl TranslationOverlay {
         self.view
             .label(ids!(overlay_footer.footer_brand.footer_label))
             .set_text(cx, Self::footer_brand_text(locale_en));
+        if self.idle_placeholder_visible {
+            self.show_idle_placeholder_if_empty(cx);
+        }
         self.view.redraw(cx);
     }
 
     pub fn set_status(&mut self, cx: &mut Cx, status: &str) {
         if self.status == status {
+            if status == "idle" && !self.idle_placeholder_visible {
+                self.show_idle_placeholder_if_empty(cx);
+            }
             return;
         }
         self.status = status.to_string();
@@ -523,6 +574,11 @@ impl TranslationOverlay {
         self.view
             .button(ids!(overlay_footer.footer_controls.overlay_stop_btn))
             .set_visible(cx, show_stop);
+        if status == "idle" {
+            self.show_idle_placeholder_if_empty(cx);
+        } else if self.idle_placeholder_visible {
+            self.clear(cx);
+        }
         self.view.redraw(cx);
     }
 
@@ -662,6 +718,22 @@ impl TranslationOverlay {
         self.passthrough = passthrough;
     }
 
+    pub fn set_language_pair(&mut self, cx: &mut Cx, source_lang: &str, target_lang: &str) {
+        let passthrough = target_lang.eq_ignore_ascii_case("none");
+        self.passthrough = passthrough;
+        let placeholder_lang = if passthrough {
+            source_lang
+        } else {
+            target_lang
+        };
+        if self.placeholder_lang != placeholder_lang {
+            self.placeholder_lang = placeholder_lang.to_string();
+        }
+        if !self.has_runtime_content() || self.idle_placeholder_visible {
+            self.show_idle_placeholder_if_empty(cx);
+        }
+    }
+
     /// Set overlay background opacity (0.0 = fully transparent, 1.0 = opaque).
     pub fn set_opacity(&mut self, cx: &mut Cx, opacity: f64) {
         self.view.apply_over(
@@ -683,6 +755,7 @@ impl TranslationOverlay {
         history: &[(String, String)],
         pending: &str,
     ) {
+        self.idle_placeholder_visible = false;
         let history_segments = Self::format_history_segments(history, self.passthrough);
         self.view
             .translation_history(ids!(content_scroll.history_flow))
@@ -747,6 +820,7 @@ impl TranslationOverlay {
     pub fn clear(&mut self, cx: &mut Cx) {
         self.last_history_len = 0;
         self.last_pending_text.clear();
+        self.idle_placeholder_visible = false;
         self.pending_active = false;
         self.follow_tail_scroll = false;
         self.pending_only_mode = false;

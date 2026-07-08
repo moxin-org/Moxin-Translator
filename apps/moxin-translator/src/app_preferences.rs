@@ -31,6 +31,7 @@ pub struct AppPreferences {
     pub translation_transcript_save_dir: Option<String>,
     pub experimental_spoken_translation_enabled: bool,
     pub experimental_spoken_translation_output_device: Option<String>,
+    pub experimental_spoken_translation_voice: Option<String>,
     pub debug_logs_enabled: bool,
 }
 
@@ -58,6 +59,7 @@ impl Default for AppPreferences {
             translation_transcript_save_dir: None,
             experimental_spoken_translation_enabled: false,
             experimental_spoken_translation_output_device: None,
+            experimental_spoken_translation_voice: None,
             debug_logs_enabled: false,
         }
     }
@@ -221,6 +223,7 @@ mod tests {
         assert!(prefs
             .experimental_spoken_translation_output_device
             .is_none());
+        assert!(prefs.experimental_spoken_translation_voice.is_none());
     }
 
     #[test]
@@ -228,6 +231,7 @@ mod tests {
         let prefs = AppPreferences {
             experimental_spoken_translation_enabled: true,
             experimental_spoken_translation_output_device: Some("Headsets".to_string()),
+            experimental_spoken_translation_voice: Some("Samantha".to_string()),
             ..AppPreferences::default()
         };
 
@@ -239,6 +243,10 @@ mod tests {
                 .experimental_spoken_translation_output_device
                 .as_deref(),
             Some("Headsets")
+        );
+        assert_eq!(
+            prefs.experimental_spoken_translation_voice.as_deref(),
+            Some("Samantha")
         );
     }
 }

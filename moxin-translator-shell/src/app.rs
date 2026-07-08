@@ -309,8 +309,6 @@ impl AppMain for App {
                 unsafe {
                     hide_nswindow_traffic_lights("Translation");
                 }
-                // Keep hidden by default at startup.
-                cx.push_unique_platform_op(CxOsOp::MinimizeWindow(ev.window_id));
             } else if self.main_window_id.is_none() {
                 self.main_window_id = Some(ev.window_id);
                 ::log::info!("[main_ui] detected window_id={:?}", ev.window_id);
@@ -537,11 +535,10 @@ impl MatchEvent for App {
                 overlay.set_locale(cx, locale_en);
             };
         }
-        if let Some((_, tgt)) = dora_state.translation_lang_pair.read_if_dirty() {
-            let passthrough = tgt.eq_ignore_ascii_case("none");
+        if let Some((src, tgt)) = dora_state.translation_lang_pair.read_if_dirty() {
             let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
             if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_passthrough(cx, passthrough);
+                overlay.set_language_pair(cx, &src, &tgt);
             };
         }
 
