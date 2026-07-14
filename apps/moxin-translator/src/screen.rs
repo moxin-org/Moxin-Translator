@@ -6923,7 +6923,7 @@ live_design! {
 
                                 // ── 设置卡片组 ──────────────────────────────────
                                 settings_card = <RoundedView> {
-                                    width: Fill, height: 510
+                                    width: Fill, height: Fit
                                     flow: Right
                                     spacing: 20
                                     padding: 18
@@ -7511,7 +7511,7 @@ live_design! {
                                             }
 
                                             setting_row_spoken_voice = <View> {
-                                                width: Fill, height: 164
+                                                width: Fill, height: 112
                                                 flow: Down
                                                 spacing: 4
 
@@ -7526,9 +7526,9 @@ live_design! {
                                                 }
 
                                                 spoken_voice_list = <RoundedView> {
-                                                    width: Fill, height: 146
-                                                    flow: Down
-                                                    spacing: 2
+                                                    width: Fill, height: 94
+                                                    flow: RightWrap
+                                                    spacing: 4
                                                     padding: 4
                                                     draw_bg: {
                                                         instance dark_mode: 0.0
@@ -7545,35 +7545,35 @@ live_design! {
                                                     }
 
                                                     spoken_voice_row_0 = <View> {
-                                                        width: Fill, height: 26
+                                                        width: 134, height: 26
                                                         flow: Right
                                                         spacing: 4
                                                         select_btn = <VoiceSelectBtn> { height: 26, text: "Vivian" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_1 = <View> {
-                                                        width: Fill, height: 26
+                                                        width: 134, height: 26
                                                         flow: Right
                                                         spacing: 4
                                                         select_btn = <VoiceSelectBtn> { height: 26, text: "Serena" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_2 = <View> {
-                                                        width: Fill, height: 26
+                                                        width: 134, height: 26
                                                         flow: Right
                                                         spacing: 4
                                                         select_btn = <VoiceSelectBtn> { height: 26, text: "Uncle Fu" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_3 = <View> {
-                                                        width: Fill, height: 26
+                                                        width: 134, height: 26
                                                         flow: Right
                                                         spacing: 4
                                                         select_btn = <VoiceSelectBtn> { height: 26, text: "Dylan" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_4 = <View> {
-                                                        width: Fill, height: 26
+                                                        width: 134, height: 26
                                                         flow: Right
                                                         spacing: 4
                                                         select_btn = <VoiceSelectBtn> { height: 26, text: "Eric" }
