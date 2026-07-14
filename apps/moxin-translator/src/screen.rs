@@ -1293,6 +1293,7 @@ live_design! {
         flow: Right
         spacing: 2
         padding: 3
+        align: {y: 0.5}
         draw_bg: {
             instance dark_mode: 0.0
             instance border_radius: 9.0
@@ -1311,6 +1312,7 @@ live_design! {
     ToolbarSegmentBtn = <Button> {
         width: Fit, height: 28
         padding: {left: 11, right: 11}
+        margin: {top: 0, bottom: 0}
         draw_bg: {
             instance active: 0.0
             instance hover: 0.0
@@ -1345,6 +1347,7 @@ live_design! {
     SettingsIconBtn = <Button> {
         width: 38, height: 36
         padding: {left: 0, right: 0}
+        margin: {top: 0, bottom: 0}
         text: ""
         draw_bg: {
             instance active: 0.0
@@ -1390,6 +1393,7 @@ live_design! {
     VoiceSelectBtn = <Button> {
         width: Fill, height: 36
         padding: {left: 12, right: 12}
+        margin: {top: 0, bottom: 0}
         align: {x: 0.0, y: 0.5}
         draw_bg: {
             instance active: 0.0
@@ -1568,6 +1572,7 @@ live_design! {
         width: Fill, height: 42
         padding: {left: 13, right: 36, top: 10, bottom: 10}
         margin: {top: 0, bottom: 0}
+        align: {y: 0.5}
         popup_menu_position: BelowInput
         popup_menu: <SettingsDevicePopupMenu> {}
         draw_bg: {
@@ -6967,7 +6972,7 @@ live_design! {
                                         }
 
                                         route_card = <RoundedView> {
-                                            width: Fill, height: 196
+                                            width: Fill, height: 204
                                             flow: Right
                                             spacing: 12
                                             padding: 12
@@ -7007,6 +7012,7 @@ live_design! {
 
                                                 route_source_kicker = <Label> {
                                                     width: Fit, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
@@ -7019,6 +7025,7 @@ live_design! {
 
                                                 route_source_language_value = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_SEMIBOLD>{ font_size: 21.0 }
@@ -7041,6 +7048,7 @@ live_design! {
 
                                                         translation_src_lang_label = <Label> {
                                                             width: Fill, height: Fit
+                                                            padding: {top: 0, bottom: 0}
                                                             draw_text: {
                                                                 instance dark_mode: 0.0
                                                                 text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7065,6 +7073,7 @@ live_design! {
 
                                                         translation_source_label = <Label> {
                                                             width: Fill, height: Fit
+                                                            padding: {top: 0, bottom: 0}
                                                             draw_text: {
                                                                 instance dark_mode: 0.0
                                                                 text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7114,6 +7123,7 @@ live_design! {
 
                                                 route_target_kicker = <Label> {
                                                     width: Fit, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
@@ -7126,6 +7136,7 @@ live_design! {
 
                                                 route_target_language_value = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_SEMIBOLD>{ font_size: 21.0 }
@@ -7148,6 +7159,7 @@ live_design! {
 
                                                         translation_tgt_lang_label = <Label> {
                                                             width: Fill, height: Fit
+                                                            padding: {top: 0, bottom: 0}
                                                             draw_text: {
                                                                 instance dark_mode: 0.0
                                                                 text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7226,6 +7238,7 @@ live_design! {
 
                                                 translation_overlay_style_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7262,6 +7275,7 @@ live_design! {
 
                                                 translation_font_size_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7286,6 +7300,7 @@ live_design! {
 
                                                 translation_footer_font_size_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7316,6 +7331,7 @@ live_design! {
 
                                                     translation_anchor_position_label = <Label> {
                                                         width: Fit, height: Fit
+                                                        padding: {top: 0, bottom: 0}
                                                         draw_text: {
                                                             instance dark_mode: 0.0
                                                             text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7343,6 +7359,7 @@ live_design! {
 
                                                 translation_opacity_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7425,6 +7442,7 @@ live_design! {
 
                                                 section_voice_title = <Label> {
                                                     width: Fit, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
@@ -7437,6 +7455,7 @@ live_design! {
 
                                                 voice_note = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_REGULAR>{ font_size: 11.0 }
@@ -7457,6 +7476,7 @@ live_design! {
 
                                                 spoken_translation_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 12.0 }
@@ -7485,12 +7505,13 @@ live_design! {
                                             }
 
                                             setting_row_spoken_output = <View> {
-                                                width: Fill, height: 58
+                                                width: Fill, height: 64
                                                 flow: Down
                                                 spacing: 4
 
                                                 spoken_output_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
@@ -7517,6 +7538,7 @@ live_design! {
 
                                                 spoken_voice_label = <Label> {
                                                     width: Fill, height: Fit
+                                                    padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
