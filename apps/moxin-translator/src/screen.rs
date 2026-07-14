@@ -7445,7 +7445,7 @@ live_design! {
                                                         }
                                                         wrap: Word
                                                     }
-                                                    text: "Experimental · Reads completed translations aloud"
+                                                    text: "Experimental · Reads final translations"
                                                 }
                                             }
 
@@ -17246,8 +17246,8 @@ impl TTSScreen {
             .set_text(
                 cx,
                 self.tr(
-                    "实验功能 · 朗读已完成的译文",
-                    "Experimental · Reads completed translations aloud",
+                    "实验功能 · 朗读完整译文",
+                    "Experimental · Reads final translations",
                 ),
             );
         self.view
