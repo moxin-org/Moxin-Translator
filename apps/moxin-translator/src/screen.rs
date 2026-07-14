@@ -6923,7 +6923,7 @@ live_design! {
 
                                 // ── 设置卡片组 ──────────────────────────────────
                                 settings_card = <RoundedView> {
-                                    width: Fill, height: Fit
+                                    width: Fill, height: 510
                                     flow: Right
                                     spacing: 20
                                     padding: 18
