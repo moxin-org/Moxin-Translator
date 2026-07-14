@@ -1443,21 +1443,21 @@ live_design! {
     }
 
     RouteSwapBtn = <Button> {
-        width: 48, height: 42
+        width: 42, height: 42
         padding: {left: 0, right: 0}
         text: "⇄"
         draw_bg: {
             instance hover: 0.0
             instance pressed: 0.0
             instance dark_mode: 0.0
-            instance border_radius: 8.0
+            instance border_radius: 21.0
             fn pixel(self) -> vec4 {
                 let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                 sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                let base = mix(vec4(0.96, 0.97, 0.99, 1.0), vec4(0.20, 0.24, 0.31, 1.0), self.dark_mode);
-                let hover = mix(vec4(0.90, 0.94, 1.0, 1.0), vec4(0.26, 0.32, 0.43, 1.0), self.dark_mode);
-                let pressed = mix(vec4(0.84, 0.90, 0.99, 1.0), vec4(0.30, 0.37, 0.50, 1.0), self.dark_mode);
-                let border = mix(vec4(0.62, 0.70, 0.84, 1.0), vec4(0.42, 0.52, 0.68, 1.0), self.dark_mode);
+                let base = mix(vec4(0.95, 0.97, 1.0, 1.0), vec4(0.18, 0.23, 0.32, 1.0), self.dark_mode);
+                let hover = mix(vec4(0.88, 0.93, 1.0, 1.0), vec4(0.24, 0.31, 0.43, 1.0), self.dark_mode);
+                let pressed = mix(vec4(0.81, 0.88, 0.98, 1.0), vec4(0.29, 0.37, 0.50, 1.0), self.dark_mode);
+                let border = mix(vec4(0.68, 0.76, 0.88, 1.0), vec4(0.39, 0.49, 0.66, 1.0), self.dark_mode);
                 sdf.fill(mix(mix(base, hover, self.hover), pressed, self.pressed));
                 sdf.stroke(border, 1.0);
                 return sdf.result;
@@ -1465,7 +1465,7 @@ live_design! {
         }
         draw_text: {
             instance dark_mode: 0.0
-            text_style: <FONT_SEMIBOLD>{ font_size: 22.0 }
+            text_style: <FONT_SEMIBOLD>{ font_size: 19.0 }
             fn get_color(self) -> vec4 {
                 return mix(vec4(0.23, 0.44, 0.83, 1.0), vec4(0.58, 0.72, 1.0, 1.0), self.dark_mode);
             }
@@ -1513,8 +1513,8 @@ live_design! {
     }
 
     SettingsDeviceDropDown = <DropDown> {
-        width: Fill, height: 40
-        padding: {left: 12, right: 34, top: 9, bottom: 9}
+        width: Fill, height: 42
+        padding: {left: 13, right: 36, top: 10, bottom: 10}
         margin: {top: 0, bottom: 0}
         popup_menu_position: BelowInput
         popup_menu: <SettingsDevicePopupMenu> {}
@@ -1522,24 +1522,31 @@ live_design! {
             instance dark_mode: 0.0
             // 0.0 = enabled, 1.0 = disabled (mute background + border)
             instance disabled: 0.0
-            border_radius: 7.0
+            border_radius: 8.0
             border_size: 1.0
             fn pixel(self) -> vec4 {
                 let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                 sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                let bg_normal = mix(vec4(0.96, 0.97, 0.99, 1.0), vec4(0.20, 0.24, 0.31, 1.0), self.dark_mode);
+                let bg_normal = mix((WHITE), vec4(0.17, 0.20, 0.27, 1.0), self.dark_mode);
                 let bg_disabled = mix(vec4(0.90, 0.92, 0.94, 1.0), vec4(0.16, 0.19, 0.26, 1.0), self.dark_mode);
-                let border_normal = mix(vec4(0.66, 0.72, 0.82, 1.0), vec4(0.38, 0.45, 0.57, 1.0), self.dark_mode);
+                let border_normal = mix(vec4(0.74, 0.79, 0.86, 1.0), vec4(0.38, 0.45, 0.57, 1.0), self.dark_mode);
                 let border_disabled = mix(vec4(0.80, 0.84, 0.90, 1.0), vec4(0.28, 0.33, 0.42, 1.0), self.dark_mode);
                 sdf.fill(mix(bg_normal, bg_disabled, self.disabled));
                 sdf.stroke(mix(border_normal, border_disabled, self.disabled), self.border_size);
+                let arrow = mix(vec4(0.38, 0.44, 0.53, 1.0), vec4(0.67, 0.73, 0.82, 1.0), self.dark_mode);
+                let ax = self.rect_size.x - 17.0;
+                let ay = self.rect_size.y * 0.5;
+                sdf.move_to(ax - 3.5, ay - 2.0);
+                sdf.line_to(ax, ay + 2.0);
+                sdf.line_to(ax + 3.5, ay - 2.0);
+                sdf.stroke(arrow, 1.5);
                 return sdf.result;
             }
         }
         draw_text: {
             instance dark_mode: 0.0
             instance disabled: 0.0
-            text_style: <FONT_SEMIBOLD>{ font_size: 12.0 }
+            text_style: <FONT_MEDIUM>{ font_size: 12.0 }
             fn get_color(self) -> vec4 {
                 let normal = mix(vec4(0.14, 0.18, 0.24, 1.0), vec4(0.90, 0.93, 0.97, 1.0), self.dark_mode);
                 let muted = mix(vec4(0.55, 0.60, 0.68, 1.0), vec4(0.55, 0.60, 0.68, 1.0), self.dark_mode);
@@ -6888,7 +6895,7 @@ live_design! {
                                         spacing: 10
 
                                         section_audio = <View> {
-                                            width: Fill, height: 34
+                                            width: Fill, height: 32
                                             flow: Down
                                             spacing: 2
                                             padding: {left: 4, right: 4}
@@ -6897,7 +6904,7 @@ live_design! {
                                                 width: Fit, height: Fit
                                                 draw_text: {
                                                     instance dark_mode: 0.0
-                                                    text_style: <FONT_SEMIBOLD>{ font_size: 18.0 }
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 16.0 }
                                                     fn get_color(self) -> vec4 {
                                                         return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                     }
@@ -6907,18 +6914,18 @@ live_design! {
                                         }
 
                                         route_card = <RoundedView> {
-                                            width: Fill, height: 210
+                                            width: Fill, height: 196
                                             flow: Right
                                             spacing: 12
-                                            padding: {left: 16, right: 16, top: 14, bottom: 14}
+                                            padding: 12
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 12.0
+                                                instance border_radius: 10.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                                                     sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.935, 0.955, 0.982, 1.0), vec4(0.118, 0.157, 0.224, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.78, 0.84, 0.92, 1.0), vec4(0.20, 0.27, 0.36, 1.0), self.dark_mode);
+                                                    let bg = mix(vec4(0.965, 0.974, 0.987, 1.0), vec4(0.105, 0.132, 0.184, 1.0), self.dark_mode);
+                                                    let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.22, 0.28, 0.37, 1.0), self.dark_mode);
                                                     sdf.fill(bg);
                                                     sdf.stroke(border, 1.0);
                                                     return sdf.result;
@@ -6929,24 +6936,39 @@ live_design! {
                                                 width: Fill, height: Fill
                                                 flow: Down
                                                 spacing: 8
+                                                padding: {left: 14, right: 14, top: 12, bottom: 12}
+                                                show_bg: true
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    instance border_radius: 9.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                        let bg = mix((WHITE), vec4(0.14, 0.17, 0.23, 1.0), self.dark_mode);
+                                                        let border = mix(vec4(0.85, 0.88, 0.93, 1.0), vec4(0.25, 0.31, 0.40, 1.0), self.dark_mode);
+                                                        sdf.fill(bg);
+                                                        sdf.stroke(border, 1.0);
+                                                        return sdf.result;
+                                                    }
+                                                }
 
                                                 route_source_kicker = <Label> {
                                                     width: Fit, height: Fit
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_MEDIUM>{ font_size: 11.0 }
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.42, 0.48, 0.58, 1.0), vec4(0.58, 0.64, 0.72, 1.0), self.dark_mode);
                                                         }
                                                     }
-                                                    text: "Input"
+                                                    text: "Source"
                                                 }
 
                                                 route_source_language_value = <Label> {
                                                     width: Fill, height: Fit
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_SEMIBOLD>{ font_size: 24.0 }
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 21.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.08, 0.11, 0.16, 1.0), vec4(0.94, 0.96, 0.99, 1.0), self.dark_mode);
                                                         }
@@ -6955,12 +6977,12 @@ live_design! {
                                                 }
 
                                                 route_source_controls = <View> {
-                                                    width: Fill, height: 76
+                                                    width: Fill, height: 72
                                                     flow: Right
                                                     spacing: 8
 
                                                     setting_row_src_lang = <View> {
-                                                        width: 134, height: Fill
+                                                        width: 140, height: Fill
                                                         flow: Down
                                                         spacing: 3
 
@@ -6975,7 +6997,7 @@ live_design! {
                                                         }
 
                                                         src_lang_dropdown = <SettingsDeviceDropDown> {
-                                                            width: Fill, height: 40
+                                                            width: Fill, height: 42
                                                             margin: {top: 0, bottom: 0}
                                                             padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                             labels: ["Chinese", "English", "Japanese", "French"]
@@ -6999,7 +7021,7 @@ live_design! {
                                                         }
 
                                                         translation_source_dropdown = <SettingsDeviceDropDown> {
-                                                            width: Fill, height: 40
+                                                            width: Fill, height: 42
                                                             margin: {top: 0, bottom: 0}
                                                             padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                             labels: ["System Default Microphone"]
@@ -7010,7 +7032,7 @@ live_design! {
                                             }
 
                                             route_arrow_stack = <View> {
-                                                width: 64, height: Fill
+                                                width: 48, height: Fill
                                                 flow: Down
                                                 align: {x: 0.5, y: 0.43}
 
@@ -7021,24 +7043,39 @@ live_design! {
                                                 width: Fill, height: Fill
                                                 flow: Down
                                                 spacing: 8
+                                                padding: {left: 14, right: 14, top: 12, bottom: 12}
+                                                show_bg: true
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    instance border_radius: 9.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                        let bg = mix((WHITE), vec4(0.14, 0.17, 0.23, 1.0), self.dark_mode);
+                                                        let border = mix(vec4(0.85, 0.88, 0.93, 1.0), vec4(0.25, 0.31, 0.40, 1.0), self.dark_mode);
+                                                        sdf.fill(bg);
+                                                        sdf.stroke(border, 1.0);
+                                                        return sdf.result;
+                                                    }
+                                                }
 
                                                 route_target_kicker = <Label> {
                                                     width: Fit, height: Fit
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_MEDIUM>{ font_size: 11.0 }
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.42, 0.48, 0.58, 1.0), vec4(0.58, 0.64, 0.72, 1.0), self.dark_mode);
                                                         }
                                                     }
-                                                    text: "Output"
+                                                    text: "Target"
                                                 }
 
                                                 route_target_language_value = <Label> {
                                                     width: Fill, height: Fit
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_SEMIBOLD>{ font_size: 24.0 }
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 21.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.08, 0.11, 0.16, 1.0), vec4(0.94, 0.96, 0.99, 1.0), self.dark_mode);
                                                         }
@@ -7047,7 +7084,7 @@ live_design! {
                                                 }
 
                                                 route_target_controls = <View> {
-                                                    width: Fill, height: 76
+                                                    width: Fill, height: 72
                                                     flow: Right
                                                     spacing: 8
 
@@ -7067,7 +7104,7 @@ live_design! {
                                                         }
 
                                                         tgt_lang_dropdown = <SettingsDeviceDropDown> {
-                                                            width: Fill, height: 40
+                                                            width: Fill, height: 42
                                                             margin: {top: 0, bottom: 0}
                                                             padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                             labels: ["English", "Chinese", "Japanese", "French", "No translation"]
@@ -17070,7 +17107,7 @@ impl TTSScreen {
                     .route_source_group
                     .route_source_kicker
             ))
-            .set_text(cx, self.tr("输入", "Input"));
+            .set_text(cx, self.tr("来源", "Source"));
         self.view
             .label(ids!(
                 content_wrapper
@@ -27059,6 +27096,36 @@ impl TTSScreen {
                     .settings_card
                     .route_column
                     .route_card
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .route_card
+                    .route_source_group
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .route_card
+                    .route_target_group
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
         self.view
