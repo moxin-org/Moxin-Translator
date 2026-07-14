@@ -7,6 +7,7 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod app_preferences;
 pub mod app_update;
 pub mod audio_player; // Legacy audio preview support retained until the screen is split.
+pub mod bounded_drop_down;
 pub mod dora_integration;
 pub mod i18n;
 
@@ -54,6 +55,7 @@ impl MoxinApp for MoxinTranslatorApp {
 
         voice_selector::live_design(cx);
         voice_clone_modal::live_design(cx);
+        bounded_drop_down::live_design(cx);
         screen::live_design(cx);
     }
 }

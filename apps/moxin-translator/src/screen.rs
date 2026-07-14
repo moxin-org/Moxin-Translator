@@ -7,6 +7,7 @@ use crate::audio_player::{
     default_input_device_name, default_output_device_name, list_input_devices, list_output_devices,
     TTSPlayer,
 };
+use crate::bounded_drop_down::BoundedDropDownWidgetExt;
 use crate::dora_integration::DoraIntegration;
 use crate::i18n;
 use crate::log_bridge;
@@ -496,6 +497,7 @@ live_design! {
     use link::theme::*;
     use link::shaders::*;
     use link::widgets::*;
+    use crate::bounded_drop_down::*;
 
     use moxin_widgets::theme::*;
     use crate::voice_selector::VoiceSelector;
@@ -945,7 +947,7 @@ live_design! {
         }
     }
 
-    VoicePickerFilterDropDown = <DropDown> {
+    VoicePickerFilterDropDown = <BoundedDropDownBase> {
         width: Fit, height: 34
         popup_menu_position: BelowInput
         draw_bg: {
@@ -964,21 +966,12 @@ live_design! {
             text_style: <FONT_SEMIBOLD>{ font_size: 12.0 }
             fn get_color(self) -> vec4 { return vec4(0.0, 0.0, 0.0, 0.0); }
         }
-        popup_menu: {
-            width: 520.0
+        popup_menu: <BoundedPopupMenuBase> {
             draw_bg: {
-                instance dark_mode: 0.0
                 border_size: 1.0
                 border_radius: 10.0
-                fn pixel(self) -> vec4 {
-                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                    let bg = mix((WHITE), (SLATE_800), self.dark_mode);
-                    let border = mix((SLATE_400), (SLATE_600), self.dark_mode);
-                    sdf.fill(bg);
-                    sdf.stroke(border, self.border_size);
-                    return sdf.result;
-                }
+                border_light: (SLATE_400)
+                border_dark: (SLATE_600)
             }
             menu_item: {
                 indent_width: 8.0
@@ -1529,21 +1522,12 @@ live_design! {
         }
     }
 
-    SettingsDevicePopupMenu = <PopupMenu> {
-        width: 640.0
+    SettingsDevicePopupMenu = <BoundedPopupMenuBase> {
         draw_bg: {
-            instance dark_mode: 0.0
             border_size: 1.0
             border_radius: 8.0
-            fn pixel(self) -> vec4 {
-                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                let bg = mix((WHITE), (SLATE_800), self.dark_mode);
-                let border = mix((SLATE_300), (SLATE_600), self.dark_mode);
-                sdf.fill(bg);
-                sdf.stroke(border, self.border_size);
-                return sdf.result;
-            }
+            border_light: (SLATE_300)
+            border_dark: (SLATE_600)
         }
         menu_item: {
             indent_width: 8.0
@@ -1569,7 +1553,7 @@ live_design! {
         }
     }
 
-    SettingsDeviceDropDown = <DropDown> {
+    SettingsDeviceDropDown = <BoundedDropDownBase> {
         width: Fill, height: 42
         padding: {left: 13, right: 36, top: 10, bottom: 10}
         margin: {top: 0, bottom: 0}
@@ -1579,7 +1563,6 @@ live_design! {
         draw_bg: {
             instance dark_mode: 0.0
             // 0.0 = enabled, 1.0 = disabled (mute background + border)
-            instance disabled: 0.0
             border_radius: 8.0
             border_size: 1.0
             fn pixel(self) -> vec4 {
@@ -1603,7 +1586,6 @@ live_design! {
         }
         draw_text: {
             instance dark_mode: 0.0
-            instance disabled: 0.0
             text_style: <FONT_MEDIUM>{ font_size: 12.0 }
             fn get_color(self) -> vec4 {
                 let normal = mix(vec4(0.14, 0.18, 0.24, 1.0), vec4(0.90, 0.93, 0.97, 1.0), self.dark_mode);
@@ -11156,7 +11138,7 @@ impl Widget for TTSScreen {
         // Index layout: 0 = System Audio, 1 = System Default Mic, 2..N = CPAL devices
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -11257,7 +11239,7 @@ impl Widget for TTSScreen {
             let opacity_values: [f64; 7] = [1.0, 0.9, 0.85, 0.75, 0.65, 0.5, 0.35];
             if let Some(idx) = self
                 .view
-                .drop_down(ids!(
+                .bounded_drop_down(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11286,7 +11268,7 @@ impl Widget for TTSScreen {
             let lang_codes = ["zh", "en", "ja", "fr"];
             if let Some(idx) = self
                 .view
-                .drop_down(ids!(
+                .bounded_drop_down(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11321,7 +11303,7 @@ impl Widget for TTSScreen {
             let lang_codes = ["en", "zh", "ja", "fr", "none"];
             if let Some(idx) = self
                 .view
-                .drop_down(ids!(
+                .bounded_drop_down(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11409,7 +11391,7 @@ impl Widget for TTSScreen {
 
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -11580,7 +11562,7 @@ impl Widget for TTSScreen {
             ];
             if let Some(idx) = self
                 .view
-                .drop_down(ids!(
+                .bounded_drop_down(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11615,7 +11597,7 @@ impl Widget for TTSScreen {
             ];
             if let Some(idx) = self
                 .view
-                .drop_down(ids!(
+                .bounded_drop_down(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11644,7 +11626,7 @@ impl Widget for TTSScreen {
             let presets = ["35", "50", "70", "100"];
             if let Some(idx) = self
                 .view
-                .drop_down(ids!(
+                .bounded_drop_down(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11742,7 +11724,7 @@ impl Widget for TTSScreen {
 
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -11773,7 +11755,7 @@ impl Widget for TTSScreen {
 
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -12773,7 +12755,7 @@ impl Widget for TTSScreen {
 
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -12871,7 +12853,7 @@ impl Widget for TTSScreen {
         }
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -12899,7 +12881,7 @@ impl Widget for TTSScreen {
         }
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -12931,7 +12913,7 @@ impl Widget for TTSScreen {
         // Qwen3-only mode: these dropdowns are hidden. See doc/REFACTOR_QWEN3_ONLY.md.
         if let Some(idx) = self
             .view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16203,7 +16185,7 @@ impl TTSScreen {
         let mut input_labels = vec![system_default_label.clone()];
         input_labels.extend(self.available_input_devices.clone());
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16226,7 +16208,7 @@ impl TTSScreen {
             .unwrap_or(0);
         self.selected_input_device_idx = input_selected_idx.saturating_sub(1);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16244,7 +16226,7 @@ impl TTSScreen {
         let mut output_labels = vec![system_default_label.clone()];
         output_labels.extend(self.available_output_devices.clone());
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16267,7 +16249,7 @@ impl TTSScreen {
             .unwrap_or(0);
         self.selected_output_device_idx = output_selected_idx.saturating_sub(1);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16428,7 +16410,7 @@ impl TTSScreen {
             ))
             .set_text(cx, &format!("{:.0}", self.app_preferences.default_volume));
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16449,7 +16431,7 @@ impl TTSScreen {
             DownloadFormat::Mp3 => 0,
         };
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16464,7 +16446,7 @@ impl TTSScreen {
             ))
             .set_selected_item(cx, download_format_idx);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16495,7 +16477,7 @@ impl TTSScreen {
                 },
             );
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16567,7 +16549,7 @@ impl TTSScreen {
             ))
             .set_text(cx, &transcript_dir);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16598,7 +16580,7 @@ impl TTSScreen {
             _ => 0,
         };
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16646,7 +16628,7 @@ impl TTSScreen {
             .set_visible(cx, false);
 
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -16668,7 +16650,7 @@ impl TTSScreen {
                 },
             );
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -18554,7 +18536,7 @@ impl TTSScreen {
             ))
             .set_text(cx, self.tr("Qwen 模型", "Qwen models"));
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -18580,7 +18562,7 @@ impl TTSScreen {
                 },
             );
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -18602,7 +18584,7 @@ impl TTSScreen {
                 },
             );
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -18632,7 +18614,7 @@ impl TTSScreen {
                 },
             );
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -22566,7 +22548,7 @@ impl TTSScreen {
             ),
         ];
         for path in paths {
-            let dd = self.view.drop_down(path);
+            let dd = self.view.bounded_drop_down(path);
             dd.apply_over(
                 cx,
                 live! {
@@ -22669,7 +22651,7 @@ impl TTSScreen {
             .unwrap_or_else(|| self.translation_tgt_lang.clone());
 
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -22687,7 +22669,7 @@ impl TTSScreen {
             ))
             .set_labels(cx, src_labels);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -22705,7 +22687,7 @@ impl TTSScreen {
             ))
             .set_labels(cx, tgt_labels);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -22723,7 +22705,7 @@ impl TTSScreen {
             ))
             .set_selected_item(cx, src_idx);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -22889,7 +22871,7 @@ impl TTSScreen {
             .map(|idx| idx + 1)
             .unwrap_or(0);
 
-        let dd = self.view.drop_down(ids!(
+        let dd = self.view.bounded_drop_down(ids!(
             content_wrapper
                 .main_content
                 .left_column
@@ -23211,7 +23193,7 @@ impl TTSScreen {
         } else {
             ids!(disabled.on)
         };
-        let output_dd = self.view.drop_down(ids!(
+        let output_dd = self.view.bounded_drop_down(ids!(
             content_wrapper
                 .main_content
                 .left_column
@@ -23641,7 +23623,7 @@ impl TTSScreen {
             .position(|v| (*v - self.translation_overlay_opacity).abs() < 0.01)
             .unwrap_or(0); // default to 100%
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -23668,7 +23650,7 @@ impl TTSScreen {
             .position(|p| *p == self.translation_overlay_font_size_preset)
             .unwrap_or(2);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -23684,7 +23666,7 @@ impl TTSScreen {
             ))
             .set_labels(cx, labels);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -23710,7 +23692,7 @@ impl TTSScreen {
             .iter()
             .position(|p| *p == self.translation_overlay_footer_font_size_preset)
             .unwrap_or(6); // default 20pt
-        let dd = self.view.drop_down(ids!(
+        let dd = self.view.bounded_drop_down(ids!(
             content_wrapper
                 .main_content
                 .left_column
@@ -23763,7 +23745,7 @@ impl TTSScreen {
             _ => 1,
         };
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -23779,7 +23761,7 @@ impl TTSScreen {
             ))
             .set_labels(cx, labels);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -23864,7 +23846,7 @@ impl TTSScreen {
         labels.extend(self.translation_audio_devices.clone());
 
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -23884,7 +23866,7 @@ impl TTSScreen {
         let total = self.translation_audio_devices.len() + 2;
         let selected_idx = self.translation_device_idx.min(total.saturating_sub(1));
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -27072,7 +27054,7 @@ impl TTSScreen {
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.download_format_section.download_format_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 220.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
@@ -27124,7 +27106,7 @@ impl TTSScreen {
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_auto_row.transcript_auto_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.profile_panel.app_settings_card.transcript_section.transcript_auto_row.transcript_auto_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 220.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
             .text_input(ids!(
@@ -27753,43 +27735,43 @@ impl TTSScreen {
                 live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } },
             );
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.route_card.route_source_group.route_source_controls.setting_row_source.translation_source_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.route_card.route_source_group.route_source_controls.setting_row_src_lang.src_lang_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.route_card.route_target_group.route_target_controls.setting_row_tgt_lang.tgt_lang_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.settings_side_panel.voice_settings_card.setting_row_spoken_output.spoken_output_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.update_spoken_translation_voice_dropdown(cx);
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_font_size.font_size_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_footer_font_size.footer_font_size_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_anchor_position.anchor_position_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(
+            .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_opacity.opacity_dropdown
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
@@ -28578,22 +28560,22 @@ impl TTSScreen {
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.app_panel.devices_card.input_pick_row.input_device_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.app_panel.devices_card.input_pick_row.input_device_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.app_panel.devices_card.output_pick_row.output_device_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.app_panel.devices_card.output_pick_row.output_device_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.privacy_card.retention_pick_row.retention_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.privacy_card.retention_pick_row.retention_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.zero_shot_backend_pick_row.zero_shot_backend_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.zero_shot_backend_pick_row.zero_shot_backend_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.backend_pick_row.training_backend_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.backend_pick_row.training_backend_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
-            .drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.debug_pick_row.debug_logs_dropdown))
+            .bounded_drop_down(ids!(content_wrapper.main_content.left_column.content_area.user_settings_page.settings_scroll.settings_scroll_content.runtime_panel.experiments_card.debug_pick_row.debug_logs_dropdown))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { width: 520.0 draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
 
         // defaults_card labels + action buttons
