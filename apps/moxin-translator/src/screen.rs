@@ -7219,7 +7219,7 @@ live_design! {
 
                                         subtitle_options_row = <RoundedView> {
                                             width: Fill, height: Fit
-                                            flow: RightWrap
+                                            flow: Down
                                             spacing: 12
                                             padding: 12
                                             draw_bg: {
@@ -7236,7 +7236,12 @@ live_design! {
                                                 }
                                             }
 
-                                            setting_row_overlay = <View> {
+                                            subtitle_options_primary_row = <View> {
+                                                width: Fill, height: 68
+                                                flow: Right
+                                                spacing: 12
+
+                                                setting_row_overlay = <View> {
                                                 width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
@@ -7272,9 +7277,9 @@ live_design! {
                                                         draw_text: { active: 1.0 }
                                                     }
                                                 }
-                                            }
+                                                }
 
-                                            setting_row_font_size = <View> {
+                                                setting_row_font_size = <View> {
                                                 width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
@@ -7298,9 +7303,9 @@ live_design! {
                                                     labels: ["16pt", "20pt", "24pt", "30pt", "36pt", "44pt", "52pt", "64pt", "80pt", "96pt", "120pt", "160pt"]
                                                     values: ["16", "20", "24", "30", "36", "44", "52", "64", "80", "96", "120", "160"]
                                                 }
-                                            }
+                                                }
 
-                                            setting_row_footer_font_size = <View> {
+                                                setting_row_footer_font_size = <View> {
                                                 width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
@@ -7324,9 +7329,15 @@ live_design! {
                                                     labels: ["8pt", "10pt", "12pt", "14pt", "16pt", "18pt", "20pt", "22pt", "24pt", "26pt", "28pt", "30pt", "32pt"]
                                                     values: ["8", "10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32"]
                                                 }
+                                                }
                                             }
 
-                                            setting_row_anchor_position = <View> {
+                                            subtitle_options_secondary_row = <View> {
+                                                width: Fill, height: 68
+                                                flow: Right
+                                                spacing: 12
+
+                                                setting_row_anchor_position = <View> {
                                                 width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
@@ -7358,9 +7369,9 @@ live_design! {
                                                     labels: ["Center-top", "Center", "Center-bottom", "Bottom"]
                                                     values: ["35", "50", "70", "100"]
                                                 }
-                                            }
+                                                }
 
-                                            setting_row_opacity = <View> {
+                                                setting_row_opacity = <View> {
                                                 width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
@@ -7383,6 +7394,7 @@ live_design! {
                                                     padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                     labels: ["100%", "90%", "85%", "75%", "65%", "50%", "35%"]
                                                     values: ["1.0", "0.9", "0.85", "0.75", "0.65", "0.5", "0.35"]
+                                                }
                                                 }
                                             }
                                         }
