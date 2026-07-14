@@ -1288,6 +1288,60 @@ live_design! {
         text: "Tab"
     }
 
+    ToolbarSegmentGroup = <RoundedView> {
+        width: Fit, height: 34
+        flow: Right
+        spacing: 2
+        padding: 3
+        draw_bg: {
+            instance dark_mode: 0.0
+            instance border_radius: 9.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                let bg = mix(vec4(0.90, 0.92, 0.95, 1.0), vec4(0.14, 0.17, 0.22, 1.0), self.dark_mode);
+                let border = mix(vec4(0.82, 0.85, 0.90, 1.0), vec4(0.25, 0.29, 0.36, 1.0), self.dark_mode);
+                sdf.fill(bg);
+                sdf.stroke(border, 1.0);
+                return sdf.result;
+            }
+        }
+    }
+
+    ToolbarSegmentBtn = <Button> {
+        width: Fit, height: 28
+        padding: {left: 11, right: 11}
+        draw_bg: {
+            instance active: 0.0
+            instance hover: 0.0
+            instance pressed: 0.0
+            instance dark_mode: 0.0
+            instance border_radius: 6.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                let idle = vec4(0.0, 0.0, 0.0, 0.0);
+                let hover = mix(vec4(1.0, 1.0, 1.0, 0.62), vec4(1.0, 1.0, 1.0, 0.08), self.dark_mode);
+                let pressed = mix(vec4(0.82, 0.86, 0.92, 1.0), vec4(0.28, 0.33, 0.41, 1.0), self.dark_mode);
+                let active = mix((WHITE), vec4(0.27, 0.33, 0.43, 1.0), self.dark_mode);
+                let state = mix(mix(idle, hover, self.hover), pressed, self.pressed);
+                sdf.fill(mix(state, active, self.active));
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance active: 0.0
+            instance dark_mode: 0.0
+            text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+            fn get_color(self) -> vec4 {
+                let normal = mix(vec4(0.31, 0.35, 0.42, 1.0), vec4(0.72, 0.77, 0.84, 1.0), self.dark_mode);
+                let active = mix(vec4(0.15, 0.31, 0.67, 1.0), vec4(0.88, 0.92, 1.0, 1.0), self.dark_mode);
+                return mix(normal, active, self.active);
+            }
+        }
+        text: "Option"
+    }
+
     SettingsIconBtn = <Button> {
         width: 40, height: 40
         padding: {left: 0, right: 0}
@@ -2043,7 +2097,7 @@ live_design! {
                 width: Fill, height: Fill
                 flow: Down
                 spacing: 0
-                padding: { left: 40, right: 40, top: 28, bottom: 16 }
+                padding: { left: 32, right: 32, top: 24, bottom: 20 }
 
             // Left column - we keep this structure for compatibility but it now contains everything
             left_column = <View> {
@@ -6663,11 +6717,11 @@ live_design! {
                             width: Fill, height: Fit
                             flow: Right
                             align: {y: 0.5}
-                            padding: {bottom: 16}
+                            padding: {bottom: 20}
 
                             page_logo = <Image> {
-                                width: 30, height: 30
-                                margin: {right: 10}
+                                width: 36, height: 36
+                                margin: {right: 12}
                                 source: dep("crate://moxin-widgets/resources/moxin_icon_fixed.png")
                                 fit: Smallest
                             }
@@ -6675,13 +6729,13 @@ live_design! {
                             page_title_stack = <View> {
                                 width: Fill, height: Fit
                                 flow: Down
-                                spacing: 2
+                                spacing: 3
 
                                 page_title = <Label> {
                                     width: Fit, height: Fit
                                     draw_text: {
                                         instance dark_mode: 0.0
-                                        text_style: <FONT_SEMIBOLD>{ font_size: 18.0 }
+                                        text_style: <FONT_SEMIBOLD>{ font_size: 20.0 }
                                         fn get_color(self) -> vec4 {
                                             return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
                                         }
@@ -6753,41 +6807,31 @@ live_design! {
                                 width: Fit, height: Fit
                                 flow: Right
                                 align: {y: 0.5}
-                                spacing: 8
-                                margin: {left: 12}
+                                spacing: 12
+                                margin: {left: 20}
 
-                                translation_language_controls = <View> {
-                                    width: Fit, height: Fit
-                                    flow: Right
-                                    spacing: 4
+                                translation_language_controls = <ToolbarSegmentGroup> {
 
-                                    quick_lang_en_btn = <SettingsTabBtn> {
-                                        width: 48, height: 30
-                                        padding: {left: 8, right: 8}
+                                    quick_lang_en_btn = <ToolbarSegmentBtn> {
+                                        width: 46
                                         text: "EN"
                                     }
 
-                                    quick_lang_zh_btn = <SettingsTabBtn> {
-                                        width: 52, height: 30
-                                        padding: {left: 8, right: 8}
+                                    quick_lang_zh_btn = <ToolbarSegmentBtn> {
+                                        width: 50
                                         text: "中文"
                                     }
                                 }
 
-                                translation_theme_controls = <View> {
-                                    width: Fit, height: Fit
-                                    flow: Right
-                                    spacing: 4
+                                translation_theme_controls = <ToolbarSegmentGroup> {
 
-                                    quick_theme_light_btn = <SettingsTabBtn> {
-                                        width: 62, height: 30
-                                        padding: {left: 8, right: 8}
+                                    quick_theme_light_btn = <ToolbarSegmentBtn> {
+                                        width: 58
                                         text: "Light"
                                     }
 
-                                    quick_theme_dark_btn = <SettingsTabBtn> {
-                                        width: 58, height: 30
-                                        padding: {left: 8, right: 8}
+                                    quick_theme_dark_btn = <ToolbarSegmentBtn> {
+                                        width: 54
                                         text: "Dark"
                                     }
                                 }
@@ -6802,18 +6846,27 @@ live_design! {
                             spacing: 12
 
                             // ── 设置面板（启停期间始终可见）──────────────────
-                            translation_settings_panel = <View> {
+                            translation_settings_panel = <ScrollYView> {
                                 width: Fill, height: Fill
                                 flow: Down
                                 spacing: 12
                                 visible: true
+                                scroll_bars: <ScrollBars> {
+                                    show_scroll_x: false
+                                    show_scroll_y: true
+                                    scroll_bar_y: {
+                                        bar_size: 6.0
+                                        bar_side_margin: 2.0
+                                        min_handle_size: 40.0
+                                    }
+                                }
 
                                 // ── 设置卡片组 ──────────────────────────────────
                                 settings_card = <RoundedView> {
-                                    width: Fill, height: Fill
+                                    width: Fill, height: Fit
                                     flow: Right
-                                    spacing: 14
-                                    padding: 12
+                                    spacing: 20
+                                    padding: 18
                                     show_bg: true
                                     draw_bg: {
                                         instance dark_mode: 0.0
@@ -6821,8 +6874,8 @@ live_design! {
                                         fn pixel(self) -> vec4 {
                                             let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                                             sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                            let bg = mix(vec4(0.985, 0.988, 0.994, 1.0), vec4(0.078, 0.082, 0.090, 1.0), self.dark_mode);
-                                            let border = mix(vec4(0.86, 0.89, 0.94, 1.0), vec4(0.18, 0.20, 0.24, 1.0), self.dark_mode);
+                                            let bg = mix(vec4(0.995, 0.996, 0.999, 1.0), vec4(0.078, 0.082, 0.090, 1.0), self.dark_mode);
+                                            let border = mix(vec4(0.88, 0.90, 0.94, 1.0), vec4(0.18, 0.20, 0.24, 1.0), self.dark_mode);
                                             sdf.fill(bg);
                                             sdf.stroke(border, 1.0);
                                             return sdf.result;
@@ -6830,7 +6883,7 @@ live_design! {
                                     }
 
                                     route_column = <View> {
-                                        width: Fill, height: Fill
+                                        width: Fill, height: Fit
                                         flow: Down
                                         spacing: 10
 
@@ -7225,7 +7278,7 @@ live_design! {
                                     }
 
                                     settings_side_panel = <View> {
-                                        width: 324, height: Fill
+                                        width: 312, height: Fit
                                         flow: Down
                                         spacing: 10
 
@@ -26697,6 +26750,30 @@ impl TTSScreen {
                     .char_count
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .translation_language_controls
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .translation_theme_controls
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
         self.view
             .label(ids!(
                 content_wrapper
