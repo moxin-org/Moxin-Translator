@@ -1343,9 +1343,9 @@ live_design! {
     }
 
     SettingsIconBtn = <Button> {
-        width: 40, height: 40
+        width: 38, height: 36
         padding: {left: 0, right: 0}
-        text: "▶"
+        text: ""
         draw_bg: {
             instance active: 0.0
             instance hover: 0.0
@@ -1356,14 +1356,22 @@ live_design! {
             fn pixel(self) -> vec4 {
                 let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                 sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                let base = mix(vec4(0.96, 0.97, 0.99, 1.0), vec4(0.20, 0.24, 0.31, 1.0), self.dark_mode);
-                let hover = mix(vec4(0.91, 0.94, 0.99, 1.0), vec4(0.24, 0.29, 0.38, 1.0), self.dark_mode);
-                let pressed = mix(vec4(0.86, 0.91, 0.98, 1.0), vec4(0.27, 0.33, 0.43, 1.0), self.dark_mode);
-                let disabled = mix(vec4(0.90, 0.92, 0.94, 1.0), vec4(0.16, 0.19, 0.26, 1.0), self.dark_mode);
-                let border = mix(vec4(0.66, 0.72, 0.82, 1.0), vec4(0.38, 0.45, 0.57, 1.0), self.dark_mode);
+                let base = mix(vec4(0.95, 0.97, 1.0, 1.0), vec4(0.20, 0.24, 0.31, 1.0), self.dark_mode);
+                let hover = mix(vec4(0.87, 0.92, 1.0, 1.0), vec4(0.25, 0.31, 0.41, 1.0), self.dark_mode);
+                let pressed = mix(vec4(0.80, 0.88, 0.99, 1.0), vec4(0.29, 0.37, 0.49, 1.0), self.dark_mode);
+                let disabled = mix(vec4(0.94, 0.95, 0.97, 1.0), vec4(0.16, 0.19, 0.26, 1.0), self.dark_mode);
+                let border = mix(vec4(0.77, 0.83, 0.91, 1.0), vec4(0.38, 0.45, 0.57, 1.0), self.dark_mode);
                 let idle = mix(mix(base, hover, self.hover), pressed, self.pressed);
                 sdf.fill(mix(idle, disabled, self.disabled));
                 sdf.stroke(border, 1.0);
+                let icon = mix(vec4(0.25, 0.45, 0.79, 1.0), vec4(0.65, 0.76, 0.95, 1.0), self.dark_mode);
+                let muted = mix(vec4(0.61, 0.66, 0.73, 1.0), vec4(0.42, 0.47, 0.55, 1.0), self.dark_mode);
+                let c = self.rect_size * 0.5;
+                sdf.move_to(c.x - 3.0, c.y - 5.0);
+                sdf.line_to(c.x + 5.0, c.y);
+                sdf.line_to(c.x - 3.0, c.y + 5.0);
+                sdf.close_path();
+                sdf.fill(mix(icon, muted, self.disabled));
                 return sdf.result;
             }
         }
@@ -1377,6 +1385,50 @@ live_design! {
                 return mix(normal, muted, self.disabled);
             }
         }
+    }
+
+    VoiceSelectBtn = <Button> {
+        width: Fill, height: 36
+        padding: {left: 12, right: 12}
+        align: {x: 0.0, y: 0.5}
+        draw_bg: {
+            instance active: 0.0
+            instance hover: 0.0
+            instance pressed: 0.0
+            instance dark_mode: 0.0
+            instance disabled: 0.0
+            instance border_radius: 6.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                let base = vec4(0.0, 0.0, 0.0, 0.0);
+                let hover = mix(vec4(0.93, 0.96, 1.0, 1.0), vec4(0.22, 0.27, 0.35, 1.0), self.dark_mode);
+                let pressed = mix(vec4(0.86, 0.92, 1.0, 1.0), vec4(0.27, 0.34, 0.45, 1.0), self.dark_mode);
+                let active = mix(vec4(0.88, 0.93, 1.0, 1.0), vec4(0.20, 0.28, 0.42, 1.0), self.dark_mode);
+                let disabled = mix(vec4(0.0, 0.0, 0.0, 0.0), vec4(0.0, 0.0, 0.0, 0.0), self.dark_mode);
+                let state = mix(mix(base, hover, self.hover), pressed, self.pressed);
+                sdf.fill(mix(mix(state, active, self.active), disabled, self.disabled));
+                if self.active > 0.5 {
+                    let accent = mix(vec4(0.23, 0.44, 0.83, 1.0), vec4(0.50, 0.66, 1.0, 1.0), self.dark_mode);
+                    sdf.box(0., 8., 3., self.rect_size.y - 16., 1.5);
+                    sdf.fill(accent);
+                }
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance active: 0.0
+            instance dark_mode: 0.0
+            instance disabled: 0.0
+            text_style: <FONT_MEDIUM>{ font_size: 12.0 }
+            fn get_color(self) -> vec4 {
+                let normal = mix(vec4(0.17, 0.21, 0.28, 1.0), vec4(0.84, 0.88, 0.94, 1.0), self.dark_mode);
+                let active = mix(vec4(0.16, 0.36, 0.75, 1.0), vec4(0.72, 0.81, 1.0, 1.0), self.dark_mode);
+                let muted = mix(vec4(0.55, 0.60, 0.68, 1.0), vec4(0.47, 0.52, 0.60, 1.0), self.dark_mode);
+                return mix(mix(normal, active, self.active), muted, self.disabled);
+            }
+        }
+        text: "Voice"
     }
 
     SettingsHelpPill = <Button> {
@@ -7324,7 +7376,7 @@ live_design! {
                                                 width: Fit, height: Fit
                                                 draw_text: {
                                                     instance dark_mode: 0.0
-                                                    text_style: <FONT_SEMIBOLD>{ font_size: 18.0 }
+                                                text_style: <FONT_SEMIBOLD>{ font_size: 16.0 }
                                                     fn get_color(self) -> vec4 {
                                                         return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                     }
@@ -7336,7 +7388,7 @@ live_design! {
                                                 width: Fill, height: Fit
                                                 draw_text: {
                                                     instance dark_mode: 0.0
-                                                    text_style: <FONT_REGULAR>{ font_size: 10.0 }
+                                                    text_style: <FONT_REGULAR>{ font_size: 11.0 }
                                                     fn get_color(self) -> vec4 {
                                                         return mix(vec4(0.45, 0.50, 0.58, 1.0), vec4(0.52, 0.58, 0.67, 1.0), self.dark_mode);
                                                     }
@@ -7347,18 +7399,18 @@ live_design! {
                                         }
 
                                         voice_settings_card = <RoundedView> {
-                                            width: Fill, height: 502
+                                            width: Fill, height: Fit
                                             flow: Down
-                                            spacing: 8
-                                            padding: {left: 12, right: 12, top: 12, bottom: 12}
+                                            spacing: 10
+                                            padding: 14
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 12.0
+                                                instance border_radius: 10.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                                                     sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.935, 0.955, 0.982, 1.0), vec4(0.118, 0.157, 0.224, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.78, 0.84, 0.92, 1.0), vec4(0.20, 0.27, 0.36, 1.0), self.dark_mode);
+                                                    let bg = mix(vec4(0.965, 0.974, 0.987, 1.0), vec4(0.105, 0.132, 0.184, 1.0), self.dark_mode);
+                                                    let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.22, 0.28, 0.37, 1.0), self.dark_mode);
                                                     sdf.fill(bg);
                                                     sdf.stroke(border, 1.0);
                                                     return sdf.result;
@@ -7374,7 +7426,7 @@ live_design! {
                                                     width: Fit, height: Fit
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                         }
@@ -7386,7 +7438,7 @@ live_design! {
                                                     width: Fill, height: Fit
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_REGULAR>{ font_size: 10.0 }
+                                                        text_style: <FONT_REGULAR>{ font_size: 11.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.45, 0.50, 0.58, 1.0), vec4(0.52, 0.58, 0.67, 1.0), self.dark_mode);
                                                         }
@@ -7397,10 +7449,10 @@ live_design! {
                                             }
 
                                             setting_row_spoken_translation = <View> {
-                                                width: Fill, height: 34
+                                                width: Fill, height: 38
                                                 flow: Right
                                                 align: {y: 0.5}
-                                                spacing: 8
+                                                spacing: 3
 
                                                 spoken_translation_label = <Label> {
                                                     width: Fill, height: Fit
@@ -7414,16 +7466,16 @@ live_design! {
                                                     text: "Spoken Output"
                                                 }
 
-                                                spoken_translation_off_btn = <SettingsTabBtn> {
-                                                    width: 58, height: 38
+                                                spoken_translation_off_btn = <ToolbarSegmentBtn> {
+                                                    width: 54, height: 34
                                                     padding: {left: 8, right: 8}
                                                     text: "Off"
                                                     draw_bg: { active: 1.0 }
                                                     draw_text: { active: 1.0 }
                                                 }
 
-                                                spoken_translation_on_btn = <SettingsTabBtn> {
-                                                    width: 58, height: 38
+                                                spoken_translation_on_btn = <ToolbarSegmentBtn> {
+                                                    width: 54, height: 34
                                                     padding: {left: 8, right: 8}
                                                     text: "On"
                                                     draw_bg: { active: 0.0 }
@@ -7432,7 +7484,7 @@ live_design! {
                                             }
 
                                             setting_row_spoken_output = <View> {
-                                                width: Fill, height: 62
+                                                width: Fill, height: 64
                                                 flow: Down
                                                 spacing: 4
 
@@ -7441,13 +7493,13 @@ live_design! {
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return mix(vec4(0.43, 0.49, 0.58, 1.0), vec4(0.58, 0.64, 0.72, 1.0), self.dark_mode); }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
                                                     text: "Audio Device"
                                                 }
 
                                                 spoken_output_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 38
+                                                    width: Fill, height: 42
                                                     margin: {top: 0, bottom: 0}
                                                     padding: {left: 10, right: 28, top: 6, bottom: 6}
                                                     popup_menu_position: OnSelected
@@ -7458,7 +7510,7 @@ live_design! {
                                             }
 
                                             setting_row_spoken_voice = <View> {
-                                                width: Fill, height: 226
+                                                width: Fill, height: 222
                                                 flow: Down
                                                 spacing: 4
 
@@ -7467,50 +7519,64 @@ live_design! {
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return mix(vec4(0.43, 0.49, 0.58, 1.0), vec4(0.58, 0.64, 0.72, 1.0), self.dark_mode); }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
                                                     text: "Voice"
                                                 }
 
-                                                spoken_voice_list = <View> {
-                                                    width: Fill, height: 184
+                                                spoken_voice_list = <RoundedView> {
+                                                    width: Fill, height: 196
                                                     flow: Down
-                                                    spacing: 6
+                                                    spacing: 2
+                                                    padding: 4
+                                                    draw_bg: {
+                                                        instance dark_mode: 0.0
+                                                        instance border_radius: 8.0
+                                                        fn pixel(self) -> vec4 {
+                                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                            sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                                                            let bg = mix((WHITE), vec4(0.14, 0.17, 0.23, 1.0), self.dark_mode);
+                                                            let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.26, 0.32, 0.41, 1.0), self.dark_mode);
+                                                            sdf.fill(bg);
+                                                            sdf.stroke(border, 1.0);
+                                                            return sdf.result;
+                                                        }
+                                                    }
 
                                                     spoken_voice_row_0 = <View> {
-                                                        width: Fill, height: 32
+                                                        width: Fill, height: 36
                                                         flow: Right
-                                                        spacing: 6
-                                                        select_btn = <SettingsTabBtn> { width: Fill, height: 32, padding: {left: 10, right: 10}, text: "Vivian" }
-                                                        preview_btn = <SettingsIconBtn> { width: 36, height: 32, text: "▶" }
+                                                        spacing: 4
+                                                        select_btn = <VoiceSelectBtn> { text: "Vivian" }
+                                                        preview_btn = <SettingsIconBtn> {}
                                                     }
                                                     spoken_voice_row_1 = <View> {
-                                                        width: Fill, height: 32
+                                                        width: Fill, height: 36
                                                         flow: Right
-                                                        spacing: 6
-                                                        select_btn = <SettingsTabBtn> { width: Fill, height: 32, padding: {left: 10, right: 10}, text: "Serena" }
-                                                        preview_btn = <SettingsIconBtn> { width: 36, height: 32, text: "▶" }
+                                                        spacing: 4
+                                                        select_btn = <VoiceSelectBtn> { text: "Serena" }
+                                                        preview_btn = <SettingsIconBtn> {}
                                                     }
                                                     spoken_voice_row_2 = <View> {
-                                                        width: Fill, height: 32
+                                                        width: Fill, height: 36
                                                         flow: Right
-                                                        spacing: 6
-                                                        select_btn = <SettingsTabBtn> { width: Fill, height: 32, padding: {left: 10, right: 10}, text: "Uncle Fu" }
-                                                        preview_btn = <SettingsIconBtn> { width: 36, height: 32, text: "▶" }
+                                                        spacing: 4
+                                                        select_btn = <VoiceSelectBtn> { text: "Uncle Fu" }
+                                                        preview_btn = <SettingsIconBtn> {}
                                                     }
                                                     spoken_voice_row_3 = <View> {
-                                                        width: Fill, height: 32
+                                                        width: Fill, height: 36
                                                         flow: Right
-                                                        spacing: 6
-                                                        select_btn = <SettingsTabBtn> { width: Fill, height: 32, padding: {left: 10, right: 10}, text: "Dylan" }
-                                                        preview_btn = <SettingsIconBtn> { width: 36, height: 32, text: "▶" }
+                                                        spacing: 4
+                                                        select_btn = <VoiceSelectBtn> { text: "Dylan" }
+                                                        preview_btn = <SettingsIconBtn> {}
                                                     }
                                                     spoken_voice_row_4 = <View> {
-                                                        width: Fill, height: 32
+                                                        width: Fill, height: 36
                                                         flow: Right
-                                                        spacing: 6
-                                                        select_btn = <SettingsTabBtn> { width: Fill, height: 32, padding: {left: 10, right: 10}, text: "Eric" }
-                                                        preview_btn = <SettingsIconBtn> { width: 36, height: 32, text: "▶" }
+                                                        spacing: 4
+                                                        select_btn = <VoiceSelectBtn> { text: "Eric" }
+                                                        preview_btn = <SettingsIconBtn> {}
                                                     }
                                                 }
                                             }
@@ -7530,12 +7596,12 @@ live_design! {
                                         }
 
                                         privacy_status_card = <RoundedView> {
-                                            width: Fill, height: 74
+                                            width: Fill, height: 58
                                             flow: Down
-                                            padding: {left: 12, right: 12, top: 12, bottom: 12}
+                                            padding: {left: 14, right: 14, top: 10, bottom: 10}
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 12.0
+                                                instance border_radius: 9.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                                                     sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
@@ -27165,6 +27231,22 @@ impl TTSScreen {
                     .settings_card
                     .settings_side_panel
                     .voice_settings_card
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .settings_side_panel
+                    .voice_settings_card
+                    .setting_row_spoken_voice
+                    .spoken_voice_list
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
         self.view
