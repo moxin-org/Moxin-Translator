@@ -1380,7 +1380,7 @@ live_design! {
     }
 
     SettingsHelpPill = <Button> {
-        width: 38, height: 30
+        width: 22, height: 22
         padding: {left: 0, right: 0}
         text: "?"
         draw_bg: {
@@ -1389,7 +1389,7 @@ live_design! {
             instance pressed: 0.0
             fn pixel(self) -> vec4 {
                 let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                sdf.circle(self.rect_size.x * 0.5, self.rect_size.y * 0.5, 12.0);
+                sdf.circle(self.rect_size.x * 0.5, self.rect_size.y * 0.5, 9.0);
                 let bg = mix(vec4(0.88, 0.92, 0.98, 1.0), vec4(0.23, 0.28, 0.37, 1.0), self.dark_mode);
                 let hover = mix(vec4(0.80, 0.88, 1.0, 1.0), vec4(0.30, 0.37, 0.50, 1.0), self.dark_mode);
                 let pressed = mix(vec4(0.72, 0.82, 0.98, 1.0), vec4(0.34, 0.42, 0.56, 1.0), self.dark_mode);
@@ -1402,7 +1402,7 @@ live_design! {
 
         draw_text: {
             instance dark_mode: 0.0
-            text_style: <FONT_SEMIBOLD>{ font_size: 12.0 }
+                text_style: <FONT_SEMIBOLD>{ font_size: 10.0 }
             fn get_color(self) -> vec4 {
                 return mix(vec4(0.30, 0.38, 0.50, 1.0), vec4(0.72, 0.79, 0.90, 1.0), self.dark_mode);
             }
@@ -7116,7 +7116,7 @@ live_design! {
                                         }
 
                                         subtitle_window_header = <View> {
-                                            width: Fill, height: 36
+                                            width: Fill, height: 42
                                             flow: Down
                                             spacing: 2
                                             padding: {left: 4, right: 4, top: 2}
@@ -7125,7 +7125,7 @@ live_design! {
                                                 width: Fit, height: Fit
                                                 draw_text: {
                                                     instance dark_mode: 0.0
-                                                    text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
                                                     fn get_color(self) -> vec4 {
                                                         return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                     }
@@ -7148,19 +7148,18 @@ live_design! {
                                         }
 
                                         subtitle_options_row = <RoundedView> {
-                                            width: Fill, height: 98
-                                            flow: Right
-                                            spacing: 8
-                                            align: {y: 0.5}
-                                            padding: {left: 12, right: 12, top: 8, bottom: 8}
+                                            width: Fill, height: Fit
+                                            flow: RightWrap
+                                            spacing: 12
+                                            padding: 12
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 12.0
+                                                instance border_radius: 10.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                                                     sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.935, 0.955, 0.982, 1.0), vec4(0.118, 0.157, 0.224, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.78, 0.84, 0.92, 1.0), vec4(0.20, 0.27, 0.36, 1.0), self.dark_mode);
+                                                    let bg = mix(vec4(0.965, 0.974, 0.987, 1.0), vec4(0.105, 0.132, 0.184, 1.0), self.dark_mode);
+                                                    let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.22, 0.28, 0.37, 1.0), self.dark_mode);
                                                     sdf.fill(bg);
                                                     sdf.stroke(border, 1.0);
                                                     return sdf.result;
@@ -7168,7 +7167,7 @@ live_design! {
                                             }
 
                                             setting_row_overlay = <View> {
-                                                width: 216, height: Fill
+                                                width: 224, height: 66
                                                 flow: Down
                                                 spacing: 4
 
@@ -7177,28 +7176,24 @@ live_design! {
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return vec4(0.58, 0.64, 0.72, 1.0); }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
                                                     text: "Style"
                                                 }
 
-                                                overlay_style_buttons = <View> {
-                                                    width: Fill, height: 38
-                                                    margin: {top: 0, bottom: 0}
-                                                    align: {y: 0.5}
-                                                    flow: Right
-                                                    spacing: 5
+                                                overlay_style_buttons = <ToolbarSegmentGroup> {
+                                                    width: Fill, height: 42
 
-                                                    overlay_style_compact = <SettingsTabBtn> {
-                                                        width: 86, height: 38
+                                                    overlay_style_compact = <ToolbarSegmentBtn> {
+                                                        width: Fill, height: 36
                                                         padding: {left: 8, right: 8}
                                                         text: "Compact"
                                                         draw_bg: { active: 0.0 }
                                                         draw_text: { active: 0.0 }
                                                     }
 
-                                                    overlay_style_full = <SettingsTabBtn> {
-                                                        width: 104, height: 38
+                                                    overlay_style_full = <ToolbarSegmentBtn> {
+                                                        width: Fill, height: 36
                                                         padding: {left: 8, right: 8}
                                                         text: "Large"
                                                         draw_bg: { active: 1.0 }
@@ -7208,7 +7203,7 @@ live_design! {
                                             }
 
                                             setting_row_font_size = <View> {
-                                                width: 108, height: Fill
+                                                width: 224, height: 66
                                                 flow: Down
                                                 spacing: 4
 
@@ -7217,7 +7212,7 @@ live_design! {
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return vec4(0.58, 0.64, 0.72, 1.0); }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
                                                     text: "Text"
                                                 }
@@ -7232,7 +7227,7 @@ live_design! {
                                             }
 
                                             setting_row_footer_font_size = <View> {
-                                                width: 108, height: Fill
+                                                width: 224, height: 66
                                                 flow: Down
                                                 spacing: 4
 
@@ -7241,7 +7236,7 @@ live_design! {
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return vec4(0.58, 0.64, 0.72, 1.0); }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
                                                     text: "Footer"
                                                 }
@@ -7256,14 +7251,14 @@ live_design! {
                                             }
 
                                             setting_row_anchor_position = <View> {
-                                                width: 150, height: Fill
+                                                width: 224, height: 66
                                                 flow: Down
                                                 spacing: 4
 
                                                 anchor_position_label_row = <View> {
                                                     width: Fill, height: Fit
                                                     flow: Right
-                                                    spacing: 5
+                                                        spacing: 4
                                                     align: {y: 0.5}
 
                                                     translation_anchor_position_label = <Label> {
@@ -7271,7 +7266,7 @@ live_design! {
                                                         draw_text: {
                                                             instance dark_mode: 0.0
                                                             text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                            fn get_color(self) -> vec4 { return vec4(0.58, 0.64, 0.72, 1.0); }
+                                                            fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                         }
                                                         text: "Position"
                                                     }
@@ -7289,7 +7284,7 @@ live_design! {
                                             }
 
                                             setting_row_opacity = <View> {
-                                                width: 104, height: Fill
+                                                width: 224, height: 66
                                                 flow: Down
                                                 spacing: 4
 
@@ -7298,7 +7293,7 @@ live_design! {
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return vec4(0.58, 0.64, 0.72, 1.0); }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
                                                     text: "Opacity"
                                                 }
@@ -27140,6 +27135,22 @@ impl TTSScreen {
                     .settings_card
                     .route_column
                     .subtitle_options_row
+            ))
+            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_overlay
+                    .overlay_style_buttons
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
         self.view
