@@ -6953,13 +6953,15 @@ live_design! {
                                         spacing: 10
 
                                         section_audio = <View> {
-                                            width: Fill, height: 32
+                                            width: Fill, height: 36
                                             flow: Down
                                             spacing: 2
+                                            align: {y: 0.5}
                                             padding: {left: 4, right: 4}
 
                                             section_audio_title = <Label> {
                                                 width: Fit, height: Fit
+                                                padding: {top: 0, bottom: 0}
                                                 draw_text: {
                                                     instance dark_mode: 0.0
                                                     text_style: <FONT_SEMIBOLD>{ font_size: 16.0 }
