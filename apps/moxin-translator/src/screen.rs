@@ -1579,9 +1579,9 @@ live_design! {
             fn pixel(self) -> vec4 {
                 let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                 sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                let bg_normal = mix((WHITE), vec4(0.17, 0.20, 0.27, 1.0), self.dark_mode);
+                let bg_normal = mix(vec4(0.975, 0.982, 0.992, 1.0), vec4(0.17, 0.20, 0.27, 1.0), self.dark_mode);
                 let bg_disabled = mix(vec4(0.90, 0.92, 0.94, 1.0), vec4(0.16, 0.19, 0.26, 1.0), self.dark_mode);
-                let border_normal = mix(vec4(0.74, 0.79, 0.86, 1.0), vec4(0.38, 0.45, 0.57, 1.0), self.dark_mode);
+                let border_normal = mix(vec4(0.69, 0.75, 0.83, 1.0), vec4(0.38, 0.45, 0.57, 1.0), self.dark_mode);
                 let border_disabled = mix(vec4(0.80, 0.84, 0.90, 1.0), vec4(0.28, 0.33, 0.42, 1.0), self.dark_mode);
                 sdf.fill(mix(bg_normal, bg_disabled, self.disabled));
                 sdf.stroke(mix(border_normal, border_disabled, self.disabled), self.border_size);
@@ -7395,15 +7395,15 @@ live_design! {
                                                     }
                                                     wrap: Word
                                                 }
-                                                text: "Voice interpretation and local privacy status."
+                                                text: "Offline · Voice output stays on this Mac"
                                             }
                                         }
 
                                         voice_settings_card = <RoundedView> {
                                             width: Fill, height: Fit
                                             flow: Down
-                                            spacing: 10
-                                            padding: 14
+                                            spacing: 8
+                                            padding: 12
                                             draw_bg: {
                                                 instance dark_mode: 0.0
                                                 instance border_radius: 10.0
@@ -7445,12 +7445,12 @@ live_design! {
                                                         }
                                                         wrap: Word
                                                     }
-                                                    text: "Read translated text aloud."
+                                                    text: "Experimental · Reads completed translations aloud"
                                                 }
                                             }
 
                                             setting_row_spoken_translation = <View> {
-                                                width: Fill, height: 38
+                                                width: Fill, height: 34
                                                 flow: Right
                                                 align: {y: 0.5}
                                                 spacing: 3
@@ -7468,7 +7468,7 @@ live_design! {
                                                 }
 
                                                 spoken_translation_off_btn = <ToolbarSegmentBtn> {
-                                                    width: 54, height: 34
+                                                    width: 54, height: 32
                                                     padding: {left: 8, right: 8}
                                                     text: "Off"
                                                     draw_bg: { active: 1.0 }
@@ -7476,7 +7476,7 @@ live_design! {
                                                 }
 
                                                 spoken_translation_on_btn = <ToolbarSegmentBtn> {
-                                                    width: 54, height: 34
+                                                    width: 54, height: 32
                                                     padding: {left: 8, right: 8}
                                                     text: "On"
                                                     draw_bg: { active: 0.0 }
@@ -7485,7 +7485,7 @@ live_design! {
                                             }
 
                                             setting_row_spoken_output = <View> {
-                                                width: Fill, height: 64
+                                                width: Fill, height: 58
                                                 flow: Down
                                                 spacing: 4
 
@@ -7500,7 +7500,7 @@ live_design! {
                                                 }
 
                                                 spoken_output_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 42
+                                                    width: Fill, height: 38
                                                     margin: {top: 0, bottom: 0}
                                                     padding: {left: 10, right: 28, top: 6, bottom: 6}
                                                     popup_menu_position: OnSelected
@@ -7511,7 +7511,7 @@ live_design! {
                                             }
 
                                             setting_row_spoken_voice = <View> {
-                                                width: Fill, height: 222
+                                                width: Fill, height: 184
                                                 flow: Down
                                                 spacing: 4
 
@@ -7526,7 +7526,7 @@ live_design! {
                                                 }
 
                                                 spoken_voice_list = <RoundedView> {
-                                                    width: Fill, height: 196
+                                                    width: Fill, height: 166
                                                     flow: Down
                                                     spacing: 2
                                                     padding: 4
@@ -7545,45 +7545,45 @@ live_design! {
                                                     }
 
                                                     spoken_voice_row_0 = <View> {
-                                                        width: Fill, height: 36
+                                                        width: Fill, height: 30
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { text: "Vivian" }
-                                                        preview_btn = <SettingsIconBtn> {}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Vivian" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                     spoken_voice_row_1 = <View> {
-                                                        width: Fill, height: 36
+                                                        width: Fill, height: 30
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { text: "Serena" }
-                                                        preview_btn = <SettingsIconBtn> {}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Serena" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                     spoken_voice_row_2 = <View> {
-                                                        width: Fill, height: 36
+                                                        width: Fill, height: 30
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { text: "Uncle Fu" }
-                                                        preview_btn = <SettingsIconBtn> {}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Uncle Fu" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                     spoken_voice_row_3 = <View> {
-                                                        width: Fill, height: 36
+                                                        width: Fill, height: 30
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { text: "Dylan" }
-                                                        preview_btn = <SettingsIconBtn> {}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Dylan" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                     spoken_voice_row_4 = <View> {
-                                                        width: Fill, height: 36
+                                                        width: Fill, height: 30
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { text: "Eric" }
-                                                        preview_btn = <SettingsIconBtn> {}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Eric" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                 }
                                             }
 
                                             voice_support_note = <Label> {
-                                                width: Fill, height: Fit
+                                                width: Fill, height: 0
                                                 draw_text: {
                                                     instance dark_mode: 0.0
                                                     text_style: <FONT_REGULAR>{ font_size: 10.0 }
@@ -7592,12 +7592,13 @@ live_design! {
                                                     }
                                                     wrap: Word
                                                 }
-                                                text: "Experimental. Voice choices come from local Moxin/Qwen voices."
+                                                text: "Local Moxin/Qwen voices · Preview in list"
                                             }
                                         }
 
                                         privacy_status_card = <RoundedView> {
-                                            width: Fill, height: 58
+                                            width: Fill, height: 0
+                                            visible: false
                                             flow: Down
                                             padding: {left: 14, right: 14, top: 10, bottom: 10}
                                             draw_bg: {
@@ -7655,7 +7656,6 @@ live_design! {
                                 width: 440, height: 46
                                 margin: {top: 2}
                                 padding: {left: 24, right: 24}
-                                cursor: Hand
                                 text: "Start Live Translation"
                                 draw_bg: {
                                     instance border_radius: 9.0
@@ -17224,8 +17224,8 @@ impl TTSScreen {
             .set_text(
                 cx,
                 self.tr(
-                    "语音同传与本地隐私状态。",
-                    "Voice interpretation and local privacy status.",
+                    "离线处理 · 语音输出保留在本机",
+                    "Offline · Voice output stays on this Mac",
                 ),
             );
         self.view
@@ -17238,10 +17238,18 @@ impl TTSScreen {
                     .translation_body
                     .translation_settings_panel
                     .settings_card
-                    .settings_side_panel.voice_settings_card.section_voice
+                    .settings_side_panel
+                    .voice_settings_card
+                    .section_voice
                     .voice_note
             ))
-            .set_text(cx, self.tr("实验功能：朗读翻译后的文本。关闭时不会生成或播放语音。", "Experimental: reads translated text aloud. When off, no speech is generated or played."));
+            .set_text(
+                cx,
+                self.tr(
+                    "实验功能 · 朗读已完成的译文",
+                    "Experimental · Reads completed translations aloud",
+                ),
+            );
         self.view
             .label(ids!(
                 content_wrapper
@@ -17259,8 +17267,8 @@ impl TTSScreen {
             .set_text(
                 cx,
                 self.tr(
-                    "音色来自本地 Moxin/Qwen 音色库；列表内可直接试听。",
-                    "Voices come from the local Moxin/Qwen voice library; preview them in the list.",
+                    "本地 Moxin/Qwen 音色 · 可直接试听",
+                    "Local Moxin/Qwen voices · Preview in list",
                 ),
             );
         self.view
