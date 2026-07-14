@@ -6902,7 +6902,8 @@ live_design! {
                         translation_body = <View> {
                             width: Fill, height: Fill
                             flow: Down
-                            spacing: 12
+                            spacing: 14
+                            align: {x: 0.5}
 
                             // ── 设置面板（启停期间始终可见）──────────────────
                             translation_settings_panel = <ScrollYView> {
@@ -7649,26 +7650,32 @@ live_design! {
                                 }
                             } // End translation_settings_panel
 
-                            <View> { width: Fill, height: 0 }
-
                             // ── 单按钮：根据状态在 Start ↔ Stop 切换 ─────────
                             translation_action_btn = <Button> {
-                                width: Fill, height: 48
+                                width: 440, height: 46
+                                margin: {top: 2}
+                                padding: {left: 24, right: 24}
+                                cursor: Hand
                                 text: "Start Live Translation"
                                 draw_bg: {
-                                    instance border_radius: 10.0
+                                    instance border_radius: 9.0
                                     instance running: 0.0
+                                    instance hover: 0.0
+                                    instance pressed: 0.0
                                     fn pixel(self) -> vec4 {
                                         let sdf = Sdf2d::viewport(self.pos * self.rect_size);
                                         sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
                                         let start_color = vec4(0.231, 0.435, 0.831, 1.0);
                                         let stop_color = vec4(0.85, 0.25, 0.25, 1.0);
-                                        sdf.fill(mix(start_color, stop_color, self.running));
+                                        let base = mix(start_color, stop_color, self.running);
+                                        let hover_color = mix(vec4(0.19, 0.38, 0.76, 1.0), vec4(0.78, 0.20, 0.20, 1.0), self.running);
+                                        let pressed_color = mix(vec4(0.15, 0.32, 0.68, 1.0), vec4(0.68, 0.16, 0.16, 1.0), self.running);
+                                        sdf.fill(mix(mix(base, hover_color, self.hover), pressed_color, self.pressed));
                                         return sdf.result;
                                     }
                                 }
                                 draw_text: {
-                                    text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
+                                    text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
                                     fn get_color(self) -> vec4 { return vec4(1.0, 1.0, 1.0, 1.0); }
                                 }
                             }
