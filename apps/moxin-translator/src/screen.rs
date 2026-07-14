@@ -7511,7 +7511,7 @@ live_design! {
                                             }
 
                                             setting_row_spoken_voice = <View> {
-                                                width: Fill, height: 184
+                                                width: Fill, height: 164
                                                 flow: Down
                                                 spacing: 4
 
@@ -7526,7 +7526,7 @@ live_design! {
                                                 }
 
                                                 spoken_voice_list = <RoundedView> {
-                                                    width: Fill, height: 166
+                                                    width: Fill, height: 146
                                                     flow: Down
                                                     spacing: 2
                                                     padding: 4
@@ -7545,39 +7545,39 @@ live_design! {
                                                     }
 
                                                     spoken_voice_row_0 = <View> {
-                                                        width: Fill, height: 30
+                                                        width: Fill, height: 26
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Vivian" }
-                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                        select_btn = <VoiceSelectBtn> { height: 26, text: "Vivian" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_1 = <View> {
-                                                        width: Fill, height: 30
+                                                        width: Fill, height: 26
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Serena" }
-                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                        select_btn = <VoiceSelectBtn> { height: 26, text: "Serena" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_2 = <View> {
-                                                        width: Fill, height: 30
+                                                        width: Fill, height: 26
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Uncle Fu" }
-                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                        select_btn = <VoiceSelectBtn> { height: 26, text: "Uncle Fu" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_3 = <View> {
-                                                        width: Fill, height: 30
+                                                        width: Fill, height: 26
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Dylan" }
-                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                        select_btn = <VoiceSelectBtn> { height: 26, text: "Dylan" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                     spoken_voice_row_4 = <View> {
-                                                        width: Fill, height: 30
+                                                        width: Fill, height: 26
                                                         flow: Right
                                                         spacing: 4
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Eric" }
-                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                        select_btn = <VoiceSelectBtn> { height: 26, text: "Eric" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 26 }
                                                     }
                                                 }
                                             }
