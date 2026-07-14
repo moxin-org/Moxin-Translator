@@ -1437,7 +1437,8 @@ live_design! {
 
     SettingsHelpPill = <Button> {
         width: 22, height: 22
-        padding: {left: 0, right: 0}
+        padding: {left: 0, right: 0, top: 0, bottom: 0}
+        margin: {top: 0, bottom: 0}
         text: "?"
         draw_bg: {
             instance dark_mode: 0.0
@@ -7234,12 +7235,13 @@ live_design! {
                                             }
 
                                             setting_row_overlay = <View> {
-                                                width: 224, height: 66
+                                                width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
 
                                                 translation_overlay_style_label = <Label> {
-                                                    width: Fill, height: Fit
+                                                    width: Fill, height: 22
+                                                    align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7271,12 +7273,13 @@ live_design! {
                                             }
 
                                             setting_row_font_size = <View> {
-                                                width: 224, height: 66
+                                                width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
 
                                                 translation_font_size_label = <Label> {
-                                                    width: Fill, height: Fit
+                                                    width: Fill, height: 22
+                                                    align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7296,12 +7299,13 @@ live_design! {
                                             }
 
                                             setting_row_footer_font_size = <View> {
-                                                width: 224, height: 66
+                                                width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
 
                                                 translation_footer_font_size_label = <Label> {
-                                                    width: Fill, height: Fit
+                                                    width: Fill, height: 22
+                                                    align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7321,14 +7325,14 @@ live_design! {
                                             }
 
                                             setting_row_anchor_position = <View> {
-                                                width: 224, height: 66
+                                                width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
 
                                                 anchor_position_label_row = <View> {
-                                                    width: Fill, height: Fit
+                                                    width: Fill, height: 22
                                                     flow: Right
-                                                        spacing: 4
+                                                    spacing: 4
                                                     align: {y: 0.5}
 
                                                     translation_anchor_position_label = <Label> {
@@ -7355,12 +7359,13 @@ live_design! {
                                             }
 
                                             setting_row_opacity = <View> {
-                                                width: 224, height: 66
+                                                width: 224, height: 68
                                                 flow: Down
                                                 spacing: 4
 
                                                 translation_opacity_label = <Label> {
-                                                    width: Fill, height: Fit
+                                                    width: Fill, height: 22
+                                                    align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
