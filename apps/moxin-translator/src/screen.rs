@@ -6794,10 +6794,11 @@ live_design! {
                             page_title_stack = <View> {
                                 width: Fill, height: Fit
                                 flow: Down
-                                spacing: 3
+                                spacing: 2
 
                                 page_title = <Label> {
                                     width: Fit, height: Fit
+                                    padding: {left: 0, right: 0, top: 0, bottom: 0}
                                     draw_text: {
                                         instance dark_mode: 0.0
                                         text_style: <FONT_SEMIBOLD>{ font_size: 20.0 }
@@ -6810,6 +6811,7 @@ live_design! {
 
                                 page_tagline = <Label> {
                                     width: Fill, height: Fit
+                                    padding: {left: 0, right: 0, top: 0, bottom: 0}
                                     draw_text: {
                                         instance dark_mode: 0.0
                                         text_style: <FONT_REGULAR>{ font_size: 11.0 }
