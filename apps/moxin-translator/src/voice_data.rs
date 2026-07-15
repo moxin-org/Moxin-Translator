@@ -332,48 +332,9 @@ fn qwen_voice_i18n(id: &str, locale: &str) -> (&'static str, &'static str) {
                 ("赛琳娜", "温柔亲切的年轻女声")
             }
         }
-        "uncle_fu" => {
-            if en {
-                ("Uncle Fu", "Seasoned male voice with low, mellow timbre")
-            } else {
-                ("傅叔", "低沉醇厚的成熟男声")
-            }
-        }
-        "dylan" => {
-            if en {
-                ("Dylan", "Youthful Beijing male voice, clear and natural")
-            } else {
-                ("迪伦", "清朗自然的北京青年男声")
-            }
-        }
-        "eric" => {
-            if en {
-                ("Eric", "Lively Chengdu male voice with husky brightness")
-            } else {
-                ("埃里克", "活泼明亮的成都青年男声")
-            }
-        }
-        // English-only speakers — same regardless of locale
+        // English-list speakers — English names regardless of locale
         "ryan" => ("Ryan", "Dynamic male voice with strong rhythmic drive"),
         "aiden" => ("Aiden", "Sunny American male voice with clear midrange"),
-        // Japanese / Korean — show romaji name with locale-aware description
-        "ono_anna" => {
-            if en {
-                (
-                    "Ono Anna",
-                    "Playful Japanese female voice, light and nimble",
-                )
-            } else {
-                ("小野安奈", "轻快灵动的日本女声")
-            }
-        }
-        "sohee" => {
-            if en {
-                ("Sohee", "Warm Korean female voice with rich emotion")
-            } else {
-                ("素熙", "情感丰富的韩国女声")
-            }
-        }
         "baiyang" => {
             if en {
                 ("Baiyang", "Custom trained Chinese female voice")
@@ -388,6 +349,8 @@ fn qwen_voice_i18n(id: &str, locale: &str) -> (&'static str, &'static str) {
                 ("杨阳", "自定义训练中文男声")
             }
         }
+        "maple" => ("Maple", "Warm, gentle English female voice"),
+        "juniper" => ("Juniper", "Calm, soothing English female voice"),
         _ => ("", ""),
     }
 }
@@ -399,27 +362,16 @@ pub fn get_qwen_builtin_voices(locale: &str) -> Vec<Voice> {
     let specs: &[(&str, &str, &str)] = &[
         ("vivian", "zh", "vivian.wav"),
         ("serena", "zh", "serena.wav"),
-        ("uncle_fu", "zh", "uncle_fu.wav"),
-        ("dylan", "zh", "dylan.wav"),
-        ("eric", "zh", "eric.wav"),
         ("ryan", "en", "ryan.wav"),
         ("aiden", "en", "aiden.wav"),
-        ("ono_anna", "ja", "ono_anna.wav"),
-        ("sohee", "ko", "sohee.wav"),
     ];
     let mut voices: Vec<Voice> = specs
         .iter()
         .map(|(id, lang, wav)| {
             let (name, desc) = qwen_voice_i18n(id, locale);
-            let cat = match *lang {
-                "en" => VoiceCategory::Male,
-                _ => {
-                    if *id == "vivian" || *id == "serena" || *id == "ono_anna" || *id == "sohee" {
-                        VoiceCategory::Female
-                    } else {
-                        VoiceCategory::Male
-                    }
-                }
+            let cat = match *id {
+                "vivian" | "serena" => VoiceCategory::Female,
+                _ => VoiceCategory::Male,
             };
             Voice {
                 id: id.to_string(),
@@ -470,6 +422,30 @@ pub fn get_qwen_builtin_voices(locale: &str) -> Vec<Voice> {
         sovits_weights: None,
         created_at: None,
     });
+
+    // Bundled clone voices restored from the PrimeSpeech reference library.
+    // (id, language, category)
+    let icl_clones: &[(&str, &str, VoiceCategory)] = &[
+        ("maple", "en", VoiceCategory::Female),
+        ("juniper", "en", VoiceCategory::Female),
+    ];
+    for (id, lang, cat) in icl_clones {
+        let (name, desc) = qwen_voice_i18n(id, locale);
+        voices.push(Voice {
+            id: id.to_string(),
+            name: name.to_string(),
+            description: desc.to_string(),
+            category: cat.clone(),
+            language: lang.to_string(),
+            preview_audio: Some(format!("{id}.wav")),
+            source: VoiceSource::BundledIcl,
+            reference_audio_path: Some("ref.wav".to_string()),
+            prompt_text: None,
+            gpt_weights: None,
+            sovits_weights: None,
+            created_at: None,
+        });
+    }
 
     voices
 }

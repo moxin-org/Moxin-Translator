@@ -41,7 +41,7 @@ enum SpokenTranslationEvent {
     Failed { message: String },
 }
 
-const MAX_VISIBLE_SPOKEN_VOICES: usize = 5;
+const MAX_VISIBLE_SPOKEN_VOICES: usize = 12;
 
 /// Current page in the application
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -7523,14 +7523,23 @@ live_design! {
                                                     text: "Audio Device"
                                                 }
 
-                                                spoken_output_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 38
-                                                    margin: {top: 0, bottom: 0}
-                                                    padding: {left: 10, right: 28, top: 6, bottom: 6}
-                                                    popup_menu_position: OnSelected
-                                                    popup_menu: { width: 286.0 }
-                                                    labels: ["System Default"]
-                                                    values: ["default"]
+                                                spoken_output_controls = <View> {
+                                                    width: Fill, height: Fit
+                                                    flow: Right
+                                                    spacing: 6
+                                                    align: {y: 0.5}
+
+                                                    spoken_output_dropdown = <SettingsDeviceDropDown> {
+                                                        width: Fill, height: 38
+                                                        margin: {top: 0, bottom: 0}
+                                                        padding: {left: 10, right: 28, top: 6, bottom: 6}
+                                                        popup_menu_position: OnSelected
+                                                        popup_menu: { width: 286.0 }
+                                                        labels: ["System Default"]
+                                                        values: ["default"]
+                                                    }
+
+                                                    spoken_output_test_btn = <SettingsIconBtn> { width: 36, height: 38, text: "♪" }
                                                 }
                                             }
 
@@ -7555,6 +7564,10 @@ live_design! {
                                                     flow: Down
                                                     spacing: 2
                                                     padding: 4
+                                                    scroll_bars: <ScrollBars> {
+                                                        show_scroll_x: false
+                                                        show_scroll_y: true
+                                                    }
                                                     draw_bg: {
                                                         instance dark_mode: 0.0
                                                         instance border_radius: 8.0
@@ -7590,7 +7603,7 @@ live_design! {
                                                         flow: Right
                                                         spacing: 4
                                                         align: {y: 0.5}
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Uncle Fu" }
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                     spoken_voice_row_3 = <View> {
@@ -7598,7 +7611,7 @@ live_design! {
                                                         flow: Right
                                                         spacing: 4
                                                         align: {y: 0.5}
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Dylan" }
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                     spoken_voice_row_4 = <View> {
@@ -7606,7 +7619,63 @@ live_design! {
                                                         flow: Right
                                                         spacing: 4
                                                         align: {y: 0.5}
-                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "Eric" }
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_5 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_6 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_7 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_8 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_9 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_10 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
+                                                        preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
+                                                    }
+                                                    spoken_voice_row_11 = <View> {
+                                                        width: Fill, height: 30
+                                                        flow: Right
+                                                        spacing: 4
+                                                        align: {y: 0.5}
+                                                        select_btn = <VoiceSelectBtn> { height: 30, text: "" }
                                                         preview_btn = <SettingsIconBtn> { width: 34, height: 30 }
                                                     }
                                                 }
@@ -10206,6 +10275,19 @@ pub struct TTSScreen {
     available_spoken_voices: Vec<Voice>,
     #[rust]
     spoken_translation_visible_voices: Vec<Voice>,
+    /// In-flight fallback preview synthesis (macOS `say`) for a voice without local preview audio.
+    #[rust]
+    spoken_preview_rx: Option<Receiver<Result<Vec<f32>, String>>>,
+    #[rust]
+    spoken_preview_pending_voice_id: Option<String>,
+    /// True when the running translation dataflow includes the Qwen TTS node,
+    /// so spoken output goes through it instead of macOS `say`.
+    #[rust]
+    spoken_translation_qwen_active: bool,
+    /// Tick counter to refresh the output-device list periodically
+    /// (Bluetooth devices connect/disconnect while the app is open).
+    #[rust]
+    output_device_refresh_tick: u32,
     /// Available CPAL audio input device names (populated lazily on first 更改 click)
     #[rust]
     translation_audio_devices: Vec<String>,
@@ -10523,6 +10605,9 @@ impl Widget for TTSScreen {
             self.spoken_translation_player_device = None;
             self.available_spoken_voices = Vec::new();
             self.spoken_translation_visible_voices = Vec::new();
+            self.spoken_preview_rx = None;
+            self.spoken_preview_pending_voice_id = None;
+            self.spoken_translation_qwen_active = false;
             self.translation_audio_devices = Vec::new();
             self.translation_device_idx = 0; // 0 = System Audio, 1 = System Default Mic
             self.translation_overlay_fullscreen = true;
@@ -10737,6 +10822,88 @@ impl Widget for TTSScreen {
                         self.update_voice_picker_controls(cx);
                         self.add_log(cx, "[INFO] [tts] Preview playback finished");
                     }
+                }
+            }
+
+            // Check if spoken-translation voice preview has finished
+            if self.preview_playing_voice_id.is_some() {
+                if let Some(player) = &self.spoken_translation_player {
+                    if player.check_playback_finished() {
+                        ::log::info!("[spoken-preview] playback finished naturally");
+                        self.preview_playing_voice_id = None;
+                        self.update_spoken_translation_voice_dropdown(cx);
+                    }
+                }
+            }
+
+            // Fallback preview synthesis finished — play it.
+            if let Some(rx) = &self.spoken_preview_rx {
+                match rx.try_recv() {
+                    Ok(result) => {
+                        self.spoken_preview_rx = None;
+                        let pending_voice = self.spoken_preview_pending_voice_id.take();
+                        match result {
+                            Ok(samples) if !samples.is_empty() => {
+                                self.ensure_spoken_translation_player();
+                                if let Some(player) = &self.spoken_translation_player {
+                                    player.stop();
+                                    player.write_audio(&samples);
+                                    player.resume();
+                                }
+                                self.preview_playing_voice_id = pending_voice;
+                                self.update_spoken_translation_voice_dropdown(cx);
+                            }
+                            Ok(_) => {
+                                self.show_toast(
+                                    cx,
+                                    self.tr("音色试听失败", "Voice preview failed"),
+                                );
+                            }
+                            Err(err) => {
+                                ::log::warn!("[spoken-preview] fallback synthesis failed: {err}");
+                                self.show_toast(
+                                    cx,
+                                    self.tr("音色试听失败", "Voice preview failed"),
+                                );
+                            }
+                        }
+                    }
+                    Err(mpsc::TryRecvError::Empty) => {}
+                    Err(mpsc::TryRecvError::Disconnected) => {
+                        self.spoken_preview_rx = None;
+                        self.spoken_preview_pending_voice_id = None;
+                    }
+                }
+            }
+
+            // Refresh the output-device list every ~2s so devices that connect
+            // or disconnect while the app is open (e.g. Bluetooth headphones)
+            // show up without a restart. Only touches the UI when the set changed.
+            self.output_device_refresh_tick = self.output_device_refresh_tick.wrapping_add(1);
+            if self.output_device_refresh_tick % 20 == 0 {
+                let devices = list_output_devices();
+                if devices != self.available_output_devices {
+                    self.update_spoken_translation_output_dropdown(cx);
+                }
+            }
+
+            // Spoken output audio from the Qwen TTS node in the translation dataflow.
+            if self.spoken_translation_qwen_active && self.translation_running {
+                let chunks = self
+                    .translation_shared_state()
+                    .map(|shared| shared.audio.drain())
+                    .unwrap_or_default();
+                if !chunks.is_empty() {
+                    if self.app_preferences.experimental_spoken_translation_enabled {
+                        self.ensure_spoken_translation_player();
+                        if let Some(player) = &self.spoken_translation_player {
+                            for audio in &chunks {
+                                player.write_audio(&audio.samples);
+                            }
+                        }
+                    }
+                    // When spoken output is toggled off mid-session the chunks are
+                    // drained and dropped so stale audio never plays later.
                 }
             }
 
@@ -11424,6 +11591,28 @@ impl Widget for TTSScreen {
             self.show_toast(cx, self.tr("同传输出设备已更新", "Voice output updated"));
         }
 
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .settings_side_panel
+                    .voice_settings_card
+                    .setting_row_spoken_output
+                    .spoken_output_controls
+                    .spoken_output_test_btn
+            ))
+            .clicked(&actions)
+        {
+            self.play_spoken_output_test_sound(cx);
+        }
+
         macro_rules! handle_spoken_voice_row {
             ($idx:expr, $row:ident) => {{
                 if self
@@ -11477,6 +11666,13 @@ impl Widget for TTSScreen {
         handle_spoken_voice_row!(2, spoken_voice_row_2);
         handle_spoken_voice_row!(3, spoken_voice_row_3);
         handle_spoken_voice_row!(4, spoken_voice_row_4);
+        handle_spoken_voice_row!(5, spoken_voice_row_5);
+        handle_spoken_voice_row!(6, spoken_voice_row_6);
+        handle_spoken_voice_row!(7, spoken_voice_row_7);
+        handle_spoken_voice_row!(8, spoken_voice_row_8);
+        handle_spoken_voice_row!(9, spoken_voice_row_9);
+        handle_spoken_voice_row!(10, spoken_voice_row_10);
+        handle_spoken_voice_row!(11, spoken_voice_row_11);
 
         let position_help_row = self.view.view(ids!(
             content_wrapper
@@ -20941,7 +21137,16 @@ impl TTSScreen {
                 return Some(p);
             }
         }
-        None
+        // 2. Local model dir (dev runs without an app bundle)
+        let home = dirs::home_dir()?;
+        let p = home
+            .join(".OminiX")
+            .join("models")
+            .join("qwen3-tts-mlx")
+            .join("voices")
+            .join(voice_id)
+            .join(filename);
+        p.exists().then_some(p)
     }
 
     fn load_wav_file(&self, path: &PathBuf) -> Result<Vec<f32>, String> {
@@ -22097,6 +22302,24 @@ impl TTSScreen {
             }
         };
 
+        // Qwen TTS spoken-output node: include only when the node binary and
+        // models are present; otherwise strip the block and fall back to `say`.
+        let tts_bin_path = Self::resolve_dora_binary("qwen-tts-node")
+            .filter(|_| Self::qwen_tts_models_ready())
+            .map(|path| path.to_string_lossy().into_owned());
+        self.spoken_translation_qwen_active = tts_bin_path.is_some();
+        if !self.spoken_translation_qwen_active {
+            self.add_translation_log(
+                cx,
+                "[WARN] qwen-tts-node or TTS models unavailable — spoken output falls back to system TTS",
+            );
+        }
+        let spoken_voice = self
+            .app_preferences
+            .experimental_spoken_translation_voice
+            .clone()
+            .unwrap_or_else(|| "vivian".to_string());
+
         let passthrough_flag = if self.translation_tgt_lang == "none" {
             "1"
         } else {
@@ -22125,6 +22348,13 @@ impl TTSScreen {
                 "__END_RMS_THRESHOLD__",
                 &format!("{:.4}", end_rms_threshold),
             );
+        let rendered = if let Some(tts_path) = &tts_bin_path {
+            rendered
+                .replace("__TTS_BIN_PATH__", tts_path)
+                .replace("__SPOKEN_VOICE__", &spoken_voice)
+        } else {
+            Self::strip_tts_section(&rendered)
+        };
         let rendered = Self::absolutize_dataflow_paths(&template_path, &rendered);
 
         // Write rendered dataflow to a temp file
@@ -22858,8 +23088,54 @@ impl TTSScreen {
             );
     }
 
+    /// Play a short two-tone chime through the currently selected spoken-output
+    /// device so the user can instantly verify audio is routed correctly.
+    fn play_spoken_output_test_sound(&mut self, cx: &mut Cx) {
+        let sr = SPOKEN_TRANSLATION_SAMPLE_RATE as f32;
+        let mut samples: Vec<f32> = Vec::with_capacity((sr * 0.7) as usize);
+        for (freq, dur) in [(523.25_f32, 0.28_f32), (783.99, 0.34)] {
+            let n = (sr * dur) as usize;
+            for i in 0..n {
+                let t = i as f32 / sr;
+                let attack = (i as f32 / (sr * 0.01)).min(1.0);
+                let release = (1.0 - i as f32 / n as f32).powf(0.6);
+                samples
+                    .push((t * freq * std::f32::consts::TAU).sin() * 0.4 * attack * release);
+            }
+        }
+        self.ensure_spoken_translation_player();
+        if let Some(player) = &self.spoken_translation_player {
+            player.stop();
+            player.write_audio(&samples);
+            player.resume();
+        }
+        self.show_toast(
+            cx,
+            self.tr(
+                "正在通过所选设备播放测试音",
+                "Playing test tone on the selected device",
+            ),
+        );
+    }
+
     fn update_spoken_translation_output_dropdown(&mut self, cx: &mut Cx) {
         self.available_output_devices = list_output_devices();
+
+        // A saved device that no longer exists can never be opened — reset to
+        // System Default so the UI and the actual routing stay in agreement.
+        if let Some(saved) = self
+            .app_preferences
+            .experimental_spoken_translation_output_device
+            .clone()
+        {
+            if !self.available_output_devices.contains(&saved) {
+                self.app_preferences
+                    .experimental_spoken_translation_output_device = None;
+                self.spoken_translation_player = None;
+                self.spoken_translation_player_device = None;
+                self.save_app_preferences_only(cx);
+            }
+        }
 
         let mut labels = vec![self.tr("系统默认", "System Default").to_string()];
         labels.extend(self.available_output_devices.clone());
@@ -22893,12 +23169,14 @@ impl TTSScreen {
         self.available_spoken_voices = self.local_spoken_translation_voice_candidates();
         self.spoken_translation_visible_voices = self.filtered_spoken_translation_voices();
 
+        // The saved voice is only kept if it belongs to the language-filtered list;
+        // otherwise fall back to the first voice for the newly selected language.
         let selected_id = self
             .app_preferences
             .experimental_spoken_translation_voice
             .as_deref()
             .filter(|id| {
-                self.available_spoken_voices
+                self.spoken_translation_visible_voices
                     .iter()
                     .any(|voice| voice.id == *id)
             })
@@ -22908,7 +23186,12 @@ impl TTSScreen {
                     .first()
                     .map(|voice| voice.id.clone())
             });
-        self.app_preferences.experimental_spoken_translation_voice = selected_id.clone();
+        if !self.spoken_translation_visible_voices.is_empty()
+            && self.app_preferences.experimental_spoken_translation_voice != selected_id
+        {
+            self.app_preferences.experimental_spoken_translation_voice = selected_id.clone();
+            self.save_app_preferences_only(cx);
+        }
         let enabled = self.app_preferences.experimental_spoken_translation_enabled;
         let dark_mode = self.dark_mode;
 
@@ -22942,7 +23225,9 @@ impl TTSScreen {
                     let select_disabled = if enabled { 0.0 } else { 1.0 };
                     let can_preview = self
                         .resolve_spoken_translation_voice_preview_path(&voice)
-                        .is_some();
+                        .is_some()
+                        || (cfg!(target_os = "macos")
+                            && Self::spoken_translation_say_voice(&voice).is_some());
                     let preview_disabled = if enabled && can_preview { 0.0 } else { 1.0 };
 
                     let select_btn = self.view.button(ids!(
@@ -22987,6 +23272,9 @@ impl TTSScreen {
                             .$row
                             .preview_btn
                     ));
+                    let is_previewing =
+                        self.preview_playing_voice_id.as_deref() == Some(voice.id.as_str());
+                    preview_btn.set_text(cx, if is_previewing { "■" } else { "▶" });
                     preview_btn.set_enabled(cx, enabled && can_preview);
                     preview_btn.apply_over(
                         cx,
@@ -23004,6 +23292,13 @@ impl TTSScreen {
         update_voice_row!(2, spoken_voice_row_2);
         update_voice_row!(3, spoken_voice_row_3);
         update_voice_row!(4, spoken_voice_row_4);
+        update_voice_row!(5, spoken_voice_row_5);
+        update_voice_row!(6, spoken_voice_row_6);
+        update_voice_row!(7, spoken_voice_row_7);
+        update_voice_row!(8, spoken_voice_row_8);
+        update_voice_row!(9, spoken_voice_row_9);
+        update_voice_row!(10, spoken_voice_row_10);
+        update_voice_row!(11, spoken_voice_row_11);
     }
 
     fn filtered_spoken_translation_voices(&self) -> Vec<Voice> {
@@ -23037,34 +23332,20 @@ impl TTSScreen {
         });
         voices.truncate(MAX_VISIBLE_SPOKEN_VOICES);
 
-        if let Some(selected_id) = self.spoken_translation_preferred_voice() {
-            let selected = self
-                .available_spoken_voices
-                .iter()
-                .find(|voice| voice.id == selected_id)
-                .cloned();
-            if let Some(selected) = selected {
-                if !voices.iter().any(|voice| voice.id == selected.id) {
-                    voices.insert(0, selected);
-                    voices.truncate(MAX_VISIBLE_SPOKEN_VOICES);
-                }
-            }
-        }
-
         voices
     }
 
     fn local_spoken_translation_voice_candidates(&self) -> Vec<Voice> {
-        let mut voices: Vec<Voice> = self
+        // Only the active Qwen3 voice set (builtin presets + bundled ICL voices).
+        // Legacy PrimeSpeech reference voices found on disk are intentionally excluded.
+        let voices: Vec<Voice> = self
             .library_voices
             .iter()
             .filter(|voice| matches!(voice.source, VoiceSource::Builtin | VoiceSource::BundledIcl))
             .cloned()
             .collect();
 
-        voices.extend(Self::legacy_moxin_reference_voices());
-
-        let mut deduped = Vec::new();
+        let mut deduped: Vec<Voice> = Vec::new();
         for voice in voices {
             if deduped
                 .iter()
@@ -23075,91 +23356,6 @@ impl TTSScreen {
             deduped.push(voice);
         }
         deduped
-    }
-
-    fn legacy_moxin_reference_voices() -> Vec<Voice> {
-        let root = Self::models_dir().join("voices");
-        let specs: &[(&str, &str, &str, crate::voice_data::VoiceCategory)] = &[
-            (
-                "Doubao",
-                "豆包 / Doubao",
-                "zh",
-                crate::voice_data::VoiceCategory::Female,
-            ),
-            (
-                "YangMi",
-                "杨幂 / Yang Mi",
-                "zh",
-                crate::voice_data::VoiceCategory::Female,
-            ),
-            (
-                "ZhouJielun",
-                "周杰伦 / Jay Chou",
-                "zh",
-                crate::voice_data::VoiceCategory::Male,
-            ),
-            (
-                "MaYun",
-                "马云 / Ma Yun",
-                "zh",
-                crate::voice_data::VoiceCategory::Male,
-            ),
-            (
-                "ChenYifan",
-                "陈一凡 / Chen Yifan",
-                "zh",
-                crate::voice_data::VoiceCategory::Male,
-            ),
-            (
-                "Maple",
-                "Maple",
-                "en",
-                crate::voice_data::VoiceCategory::Female,
-            ),
-            ("Cove", "Cove", "en", crate::voice_data::VoiceCategory::Male),
-            (
-                "Ellen",
-                "Ellen",
-                "en",
-                crate::voice_data::VoiceCategory::Female,
-            ),
-            (
-                "Juniper",
-                "Juniper",
-                "en",
-                crate::voice_data::VoiceCategory::Female,
-            ),
-            (
-                "Trump",
-                "Trump",
-                "en",
-                crate::voice_data::VoiceCategory::Male,
-            ),
-        ];
-
-        specs
-            .iter()
-            .filter_map(|(folder, name, language, category)| {
-                let reference = root.join(folder).join("reference.wav");
-                if !reference.is_file() {
-                    return None;
-                }
-                Some(Voice {
-                    id: format!("moxin_ref_{}", folder.to_lowercase()),
-                    name: name.to_string(),
-                    description: "Local Moxin reference voice".to_string(),
-                    category: category.clone(),
-                    language: language.to_string(),
-                    preview_audio: None,
-                    source: VoiceSource::Custom,
-                    reference_audio_path: Some(reference.to_string_lossy().to_string()),
-                    prompt_text: None,
-                    gpt_weights: None,
-                    sovits_weights: None,
-                    created_at: None,
-                })
-            })
-            .collect()
     }
 
     fn resolve_spoken_translation_voice_preview_path(&self, voice: &Voice) -> Option<PathBuf> {
@@ -23174,6 +23370,13 @@ impl TTSScreen {
                     .filter(|path| path.is_file())
             }
             VoiceSource::BundledIcl => {
+                // Prefer the unified generated preview; fall back to the reference audio.
+                if let Some(preview) = voice.preview_audio.as_deref() {
+                    let path = self.resolve_qwen_preview_path(preview);
+                    if path.is_file() {
+                        return Some(path);
+                    }
+                }
                 let filename = voice.reference_audio_path.as_deref().unwrap_or("ref.wav");
                 self.resolve_bundled_icl_ref_path(&voice.id, filename)
                     .filter(|path| path.is_file())
@@ -23230,15 +23433,6 @@ impl TTSScreen {
             .map(str::to_string)
     }
 
-    fn spoken_translation_preferred_voice(&self) -> Option<String> {
-        self.app_preferences
-            .experimental_spoken_translation_voice
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string)
-    }
-
     fn select_spoken_translation_voice_at(&mut self, cx: &mut Cx, index: usize) {
         if !self.app_preferences.experimental_spoken_translation_enabled {
             self.update_spoken_translation_controls(cx);
@@ -23259,7 +23453,49 @@ impl TTSScreen {
         self.show_toast(cx, self.tr("语音同传音色已更新", "Voice updated"));
     }
 
+    /// Map a Qwen voice to a macOS `say` voice with matching language and gender.
+    /// Used both for fallback previews and for the experimental spoken output,
+    /// which currently synthesizes through `say` until the Qwen TTS backend is wired in.
+    fn spoken_translation_say_voice(voice: &Voice) -> Option<String> {
+        use crate::voice_data::VoiceCategory;
+        let male = voice.category == VoiceCategory::Male;
+        let name = match voice.language.as_str() {
+            "zh" => {
+                if male {
+                    "Eddy (Chinese (China mainland))"
+                } else {
+                    "Tingting"
+                }
+            }
+            "en" => {
+                if male {
+                    "Daniel"
+                } else {
+                    "Samantha"
+                }
+            }
+            "ja" => "Kyoko",
+            "ko" => "Yuna",
+            _ => return None,
+        };
+        Some(name.to_string())
+    }
+
+    fn spoken_preview_sample_text(language: &str) -> &'static str {
+        match language {
+            "zh" => "你好，这是语音同传的试听示例。",
+            "ja" => "こんにちは、これは音声プレビューです。",
+            "ko" => "안녕하세요, 음성 미리듣기입니다.",
+            _ => "Hi, this is a preview of the spoken translation voice.",
+        }
+    }
+
     fn preview_spoken_translation_voice_at(&mut self, cx: &mut Cx, index: usize) {
+        ::log::info!(
+            "[spoken-preview] preview button clicked: idx={} playing_id={:?}",
+            index,
+            self.preview_playing_voice_id
+        );
         if !self.app_preferences.experimental_spoken_translation_enabled {
             self.update_spoken_translation_controls(cx);
             self.show_toast(
@@ -23272,50 +23508,95 @@ impl TTSScreen {
             return;
         };
 
-        let Some(audio_path) = self.resolve_spoken_translation_voice_preview_path(&voice) else {
-            self.show_toast(
-                cx,
-                self.tr(
-                    "这个音色暂时没有本地试听音频",
-                    "This voice has no local preview audio yet",
-                ),
-            );
-            return;
-        };
-
         if self.preview_playing_voice_id.as_deref() == Some(&voice.id) {
+            let was_playing = self
+                .spoken_translation_player
+                .as_ref()
+                .map(|player| player.is_playing())
+                .unwrap_or(false);
+            ::log::info!(
+                "[spoken-preview] toggle branch: voice={} was_playing={}",
+                voice.id,
+                was_playing
+            );
             if let Some(player) = &self.spoken_translation_player {
                 player.stop();
             }
             self.preview_playing_voice_id = None;
+            if was_playing {
+                // Second click while audible: stop and stay stopped.
+                self.update_spoken_translation_voice_dropdown(cx);
+                return;
+            }
+            // Playback already ended (stale state) — fall through and replay.
+        }
+
+        // A fallback preview for this voice is still being generated — ignore repeat clicks.
+        if self.spoken_preview_rx.is_some()
+            && self.spoken_preview_pending_voice_id.as_deref() == Some(voice.id.as_str())
+        {
             return;
         }
 
         if let Some(player) = &self.spoken_translation_player {
             player.stop();
         }
+        self.preview_playing_voice_id = None;
 
-        match self.load_wav_file(&audio_path) {
-            Ok(samples) => {
-                self.ensure_spoken_translation_player();
-                if let Some(player) = &self.spoken_translation_player {
-                    player.write_audio(&samples);
-                    player.resume();
+        if let Some(audio_path) = self.resolve_spoken_translation_voice_preview_path(&voice) {
+            match self.load_wav_file(&audio_path) {
+                Ok(samples) => {
+                    self.ensure_spoken_translation_player();
+                    if let Some(player) = &self.spoken_translation_player {
+                        player.write_audio(&samples);
+                        player.resume();
+                    }
+                    self.preview_playing_voice_id = Some(voice.id.clone());
+                    self.update_spoken_translation_voice_dropdown(cx);
+                    self.show_toast(cx, self.tr("正在试听音色", "Playing voice preview"));
                 }
-                self.preview_playing_voice_id = Some(voice.id.clone());
-                self.show_toast(cx, self.tr("正在试听音色", "Playing voice preview"));
+                Err(err) => {
+                    self.add_translation_log(
+                        cx,
+                        &format!(
+                            "[WARN] {}: {}",
+                            self.tr("音色试听失败", "Voice preview failed"),
+                            err
+                        ),
+                    );
+                    self.show_toast(cx, self.tr("音色试听失败", "Voice preview failed"));
+                }
             }
-            Err(err) => {
-                self.add_translation_log(
+        } else {
+            // No local preview audio — synthesize a short sample through the same
+            // engine the spoken output uses, mapped to this voice's language/gender.
+            let Some(say_voice) = Self::spoken_translation_say_voice(&voice) else {
+                self.show_toast(
                     cx,
-                    &format!(
-                        "[WARN] {}: {}",
-                        self.tr("音色试听失败", "Voice preview failed"),
-                        err
+                    self.tr(
+                        "这个音色暂时没有本地试听音频",
+                        "This voice has no local preview audio yet",
                     ),
                 );
-                self.show_toast(cx, self.tr("音色试听失败", "Voice preview failed"));
-            }
+                return;
+            };
+            ::log::info!(
+                "[spoken-preview] generating fallback preview: voice={} say_voice={}",
+                voice.id,
+                say_voice
+            );
+            let sample_text = Self::spoken_preview_sample_text(&voice.language).to_string();
+            let (tx, rx) = mpsc::channel();
+            self.spoken_preview_rx = Some(rx);
+            self.spoken_preview_pending_voice_id = Some(voice.id.clone());
+            thread::spawn(move || {
+                let result = TTSScreen::synthesize_spoken_translation_samples(
+                    &sample_text,
+                    Some(say_voice.as_str()),
+                );
+                let _ = tx.send(result);
+            });
+            self.show_toast(cx, self.tr("正在生成试听…", "Generating preview…"));
         }
     }
 
@@ -23394,6 +23675,32 @@ impl TTSScreen {
         fingerprint: String,
         text: String,
     ) {
+        // Preferred path: the Qwen TTS node inside the running translation dataflow.
+        // Each prompt carries the voice explicitly, so voice changes apply immediately.
+        if self.spoken_translation_qwen_active && self.translation_running {
+            let voice_id = self
+                .app_preferences
+                .experimental_spoken_translation_voice
+                .clone()
+                .unwrap_or_else(|| "vivian".to_string());
+            let voice_info = self
+                .available_spoken_voices
+                .iter()
+                .find(|voice| voice.id == voice_id)
+                .cloned();
+            let prompt = self.build_tts_prompt_for_segment(&voice_id, voice_info.as_ref(), &text);
+            let sent = self
+                .translation_dora
+                .as_ref()
+                .map(|dora| dora.send_prompt(prompt))
+                .unwrap_or(false);
+            if sent {
+                let _ = fingerprint;
+                return;
+            }
+            ::log::warn!("[spoken] failed to send TTS prompt to dataflow, falling back to say");
+        }
+
         if self.spoken_translation_in_flight {
             self.spoken_translation_pending
                 .push_back((fingerprint, text));
@@ -23403,7 +23710,18 @@ impl TTSScreen {
         let (tx, rx) = mpsc::channel();
         self.spoken_translation_rx = Some(rx);
         self.spoken_translation_in_flight = true;
-        let voice: Option<String> = None;
+        // Map the selected Qwen voice to a matching `say` voice so the
+        // voice choice is reflected in the spoken output.
+        let voice: Option<String> = self
+            .app_preferences
+            .experimental_spoken_translation_voice
+            .as_deref()
+            .and_then(|id| {
+                self.available_spoken_voices
+                    .iter()
+                    .find(|voice| voice.id == id)
+            })
+            .and_then(Self::spoken_translation_say_voice);
 
         thread::spawn(move || {
             let result = TTSScreen::synthesize_spoken_translation_samples(&text, voice.as_deref());
@@ -23492,16 +23810,24 @@ impl TTSScreen {
             let wav_path = base.with_extension("wav");
 
             let result = (|| {
-                let mut say_command = Command::new(&say);
-                if let Some(voice) = voice.map(str::trim).filter(|value| !value.is_empty()) {
-                    say_command.arg("-v").arg(voice);
+                let voice = voice.map(str::trim).filter(|value| !value.is_empty());
+                let run_say = |voice: Option<&str>| -> Result<std::process::Output, String> {
+                    let mut say_command = Command::new(&say);
+                    if let Some(voice) = voice {
+                        say_command.arg("-v").arg(voice);
+                    }
+                    say_command
+                        .arg("-o")
+                        .arg(&aiff_path)
+                        .arg(text)
+                        .output()
+                        .map_err(|e| format!("failed to launch say: {}", e))
+                };
+                let mut say_output = run_say(voice)?;
+                if !say_output.status.success() && voice.is_some() {
+                    // The requested voice may not be installed — retry with the default voice.
+                    say_output = run_say(None)?;
                 }
-                let say_output = say_command
-                    .arg("-o")
-                    .arg(&aiff_path)
-                    .arg(text)
-                    .output()
-                    .map_err(|e| format!("failed to launch say: {}", e))?;
                 if !say_output.status.success() {
                     return Err(format!(
                         "say failed: {}",
@@ -24044,6 +24370,41 @@ impl TTSScreen {
     /// Resolve the absolute path of a Dora node binary.
     /// Search order keeps app bundles self-contained while avoiding the local
     /// workspace target for MLX nodes when a verified OminiX target is present.
+    /// Whether the local Qwen3-TTS models needed by qwen-tts-node are present.
+    fn qwen_tts_models_ready() -> bool {
+        if let Ok(dir) = std::env::var("QWEN3_TTS_CUSTOMVOICE_MODEL_DIR") {
+            return Path::new(&dir).join("config.json").exists();
+        }
+        dirs::home_dir()
+            .map(|home| {
+                home.join(".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit/config.json")
+                    .exists()
+            })
+            .unwrap_or(false)
+    }
+
+    /// Remove the optional TTS node block (between `# TTS-BEGIN` and `# TTS-END`)
+    /// from a rendered dataflow when the Qwen TTS node is unavailable.
+    fn strip_tts_section(content: &str) -> String {
+        let mut out = String::with_capacity(content.len());
+        let mut skipping = false;
+        for line in content.lines() {
+            if line.contains("# TTS-BEGIN") {
+                skipping = true;
+                continue;
+            }
+            if line.contains("# TTS-END") {
+                skipping = false;
+                continue;
+            }
+            if !skipping {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out
+    }
+
     fn resolve_dora_binary(name: &str) -> Option<PathBuf> {
         if let Ok(dir) = std::env::var("MOXIN_DORA_BIN_DIR") {
             if let Some(path) = Self::dora_binary_in_dir(Path::new(&dir), name) {
@@ -24139,10 +24500,11 @@ impl TTSScreen {
                     format!("VOICE:vivian|{}", text)
                 }
             } else {
-                format!("VOICE:{}|{}", voice_id, text)
+                // English-list variants (e.g. "vivian_en") map to the same Qwen speaker.
+                format!("VOICE:{}|{}", voice_id.trim_end_matches("_en"), text)
             }
         } else {
-            format!("VOICE:{}|{}", voice_id, text)
+            format!("VOICE:{}|{}", voice_id.trim_end_matches("_en"), text)
         }
     }
 

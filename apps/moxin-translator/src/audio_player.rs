@@ -6,8 +6,6 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use parking_lot::Mutex;
 use std::collections::BTreeSet;
-#[cfg(target_os = "macos")]
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -282,6 +280,9 @@ impl TTSPlayer {
 }
 
 pub fn list_output_devices() -> Vec<String> {
+    // Only devices cpal can actually open. system_profiler reports additional
+    // outputs (display speakers, inactive built-ins) that playback can never
+    // reach — listing them made the picker silently fall back to the default.
     let host = cpal::default_host();
     let mut devices = BTreeSet::new();
     if let Some(default) = host.default_output_device().and_then(|d| d.name().ok()) {
@@ -294,55 +295,7 @@ pub fn list_output_devices() -> Vec<String> {
             }
         }
     }
-    for name in macos_coreaudio_output_devices() {
-        devices.insert(name);
-    }
     devices.into_iter().collect()
-}
-
-#[cfg(target_os = "macos")]
-fn macos_coreaudio_output_devices() -> Vec<String> {
-    let output = Command::new("/usr/sbin/system_profiler")
-        .args(["SPAudioDataType", "-json"])
-        .output();
-    let Ok(output) = output else {
-        return Vec::new();
-    };
-    if !output.status.success() {
-        return Vec::new();
-    }
-    let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
-        return Vec::new();
-    };
-
-    let mut names = Vec::new();
-    if let Some(groups) = json.get("SPAudioDataType").and_then(|v| v.as_array()) {
-        for group in groups {
-            if let Some(items) = group.get("_items").and_then(|v| v.as_array()) {
-                for item in items {
-                    let has_output = item.get("coreaudio_device_output").is_some()
-                        || item.get("coreaudio_default_audio_output_device").is_some()
-                        || item.get("coreaudio_default_audio_system_device").is_some()
-                        || item.get("coreaudio_output_source").is_some();
-                    if !has_output {
-                        continue;
-                    }
-                    if let Some(name) = item.get("_name").and_then(|v| v.as_str()) {
-                        let name = name.trim();
-                        if !name.is_empty() {
-                            names.push(name.to_string());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    names
-}
-
-#[cfg(not(target_os = "macos"))]
-fn macos_coreaudio_output_devices() -> Vec<String> {
-    Vec::new()
 }
 
 pub fn default_output_device_name() -> Option<String> {
